@@ -38,3 +38,5 @@ __pycache__/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+overlay-nrf-test.conf
