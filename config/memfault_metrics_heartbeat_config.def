@@ -3,3 +3,8 @@
  */
 
 MEMFAULT_METRICS_KEY_DEFINE(switch_1_toggle_count, kMemfaultMetricType_Unsigned)
+
+/* Custom WiFi metrics for periodic monitoring */
+MEMFAULT_METRICS_KEY_DEFINE(my_wifi_rssi, kMemfaultMetricType_Signed)
+MEMFAULT_METRICS_KEY_DEFINE(my_wifi_channel, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(my_wifi_tx_rate_mbps, kMemfaultMetricType_Unsigned)

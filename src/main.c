@@ -8,6 +8,9 @@
 #include <stdio.h>
 #include <zephyr/net/conn_mgr_connectivity.h>
 #include <zephyr/net/conn_mgr_monitor.h>
+#include <zephyr/net/net_mgmt.h>
+#include <zephyr/net/wifi.h>
+#include <zephyr/net/wifi_mgmt.h>
 #include <memfault/metrics/metrics.h>
 #include <memfault/ports/zephyr/http.h>
 #include <memfault/core/data_packetizer.h>
@@ -21,23 +24,88 @@
 LOG_MODULE_REGISTER(memfault_sample, CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL);
 
 /* Macros used to subscribe to specific Zephyr NET management events. */
-#define L4_EVENT_MASK	      (NET_EVENT_L4_CONNECTED | NET_EVENT_L4_DISCONNECTED)
+#define L4_EVENT_MASK         (NET_EVENT_L4_CONNECTED | NET_EVENT_L4_DISCONNECTED)
 #define CONN_LAYER_EVENT_MASK (NET_EVENT_CONN_IF_FATAL_ERROR)
 
 static K_SEM_DEFINE(nw_connected_sem, 0, 1);
+static bool wifi_connected = false;
 
 /* Zephyr NET management event callback structures. */
 static struct net_mgmt_event_callback l4_cb;
 static struct net_mgmt_event_callback conn_cb;
 
 /* Recursive Fibonacci calculation used to trigger stack overflow. */
-static int fib(int n)
+// static int fib(int n)
+// {
+// 	if (n <= 1) {
+// 		return n;
+// 	}
+
+// 	return fib(n - 1) + fib(n - 2);
+// }
+
+/* WiFi metrics collection timer */
+static void wifi_metrics_timer_handler(struct k_timer *timer);
+static void wifi_metrics_work_handler(struct k_work *work);
+
+K_TIMER_DEFINE(wifi_metrics_timer, wifi_metrics_timer_handler, NULL);
+K_WORK_DEFINE(wifi_metrics_work, wifi_metrics_work_handler);
+
+/* WiFi metrics collection function */
+static void collect_wifi_connection_metrics(void)
 {
-	if (n <= 1) {
-		return n;
+	struct net_if *iface = net_if_get_default();
+	struct wifi_iface_status status = {0};
+
+	if (!iface) {
+		LOG_WRN("No network interface found");
+		return;
 	}
 
-	return fib(n - 1) + fib(n - 2);
+	if (net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &status,
+		     sizeof(struct wifi_iface_status))) {
+		LOG_WRN("Failed to get WiFi interface status");
+		return;
+	}
+
+	/* Only collect metrics if we're connected in station mode */
+	if (status.state != WIFI_STATE_COMPLETED || status.iface_mode != WIFI_MODE_INFRA) {
+		LOG_DBG("WiFi not connected in station mode, skipping metrics");
+		return;
+	}
+
+	/* Set custom WiFi metrics */
+	MEMFAULT_METRIC_SET_SIGNED(my_wifi_rssi, status.rssi);
+	MEMFAULT_METRIC_SET_UNSIGNED(my_wifi_channel, status.channel);
+
+	/* Set TX rate if available (some devices may not have this value set) */
+	if (status.current_phy_tx_rate > 0.0f) {
+		MEMFAULT_METRIC_SET_UNSIGNED(my_wifi_tx_rate_mbps,
+					     (uint32_t)status.current_phy_tx_rate);
+		LOG_INF("TX Rate: %.1f Mbps", (double)status.current_phy_tx_rate);
+	} else {
+		LOG_INF("TX Rate not available (driver may not support or no data transmitted "
+			"yet)");
+	}
+
+	/* Also trigger a heartbeat to capture the current metrics */
+	memfault_metrics_heartbeat_debug_trigger();
+}
+
+/* Timer handler runs in ISR context, so dispatch to work queue */
+static void wifi_metrics_timer_handler(struct k_timer *timer)
+{
+	if (wifi_connected) {
+		k_work_submit(&wifi_metrics_work);
+	} else {
+		LOG_DBG("WiFi not connected, skipping metrics collection");
+	}
+}
+
+/* Work handler runs in thread context */
+static void wifi_metrics_work_handler(struct k_work *work)
+{
+	collect_wifi_connection_metrics();
 }
 
 /* Handle button presses and trigger faults that can be captured and sent to
@@ -53,8 +121,15 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 	uint32_t buttons_pressed = has_changed & button_states;
 
 	if (buttons_pressed & DK_BTN1_MSK) {
-		LOG_WRN("Stack overflow will now be triggered");
-		fib(10000);
+		// LOG_WRN("Stack overflow will now be triggered");
+		// fib(10000);
+		/* Manually trigger WiFi metrics collection */
+		LOG_INF("Manually triggering WiFi metrics collection");
+		if (wifi_connected) {
+			k_work_submit(&wifi_metrics_work);
+		} else {
+			LOG_WRN("WiFi not connected, cannot collect metrics");
+		}
 	} else if (buttons_pressed & DK_BTN2_MSK) {
 		volatile uint32_t i;
 
@@ -125,10 +200,19 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 	switch (event) {
 	case NET_EVENT_L4_CONNECTED:
 		LOG_INF("Network connectivity established");
+		wifi_connected = true;
+
+		/* Start WiFi metrics timer - collect metrics every 60 seconds */
+		k_timer_start(&wifi_metrics_timer, K_SECONDS(60), K_SECONDS(60));
+		LOG_INF("WiFi metrics timer started (60 second interval)");
 		k_sem_give(&nw_connected_sem);
 		break;
 	case NET_EVENT_L4_DISCONNECTED:
 		LOG_INF("Network connectivity lost");
+		wifi_connected = false;
+		/* Stop WiFi metrics timer */
+		k_timer_stop(&wifi_metrics_timer);
+		LOG_INF("WiFi metrics timer stopped");
 		break;
 	default:
 		LOG_DBG("Unknown event: 0x%08X", event);
