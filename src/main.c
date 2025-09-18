@@ -77,6 +77,8 @@ static void collect_wifi_connection_metrics(void)
 	/* Set custom WiFi metrics */
 	MEMFAULT_METRIC_SET_SIGNED(my_wifi_rssi, status.rssi);
 	MEMFAULT_METRIC_SET_UNSIGNED(my_wifi_channel, status.channel);
+	MEMFAULT_METRIC_SET_UNSIGNED(my_wifi_link_mode,
+				     status.link_mode); /*show which wifi is used, ie. wifi5 or 6*/
 
 	/* Set TX rate if available (some devices may not have this value set) */
 	if (status.current_phy_tx_rate > 0.0f) {
