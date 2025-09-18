@@ -21,6 +21,10 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
 
+#if CONFIG_MEMFAULT_NCS_STACK_METRICS
+#include "stack_unused_metrics.h"
+#endif
+
 LOG_MODULE_REGISTER(memfault_sample, CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL);
 
 /* Macros used to subscribe to specific Zephyr NET management events. */
@@ -203,6 +207,12 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 	case NET_EVENT_L4_CONNECTED:
 		LOG_INF("Network connectivity established");
 		wifi_connected = true;
+
+		/* Initialize stack metrics monitoring */
+#if CONFIG_MEMFAULT_NCS_STACK_METRICS
+		stack_unused_metrics_init();
+		LOG_INF("Stack metrics monitoring initialized");
+#endif
 
 		/* Start WiFi metrics timer - collect metrics every 60 seconds */
 		k_timer_start(&wifi_metrics_timer, K_SECONDS(60), K_SECONDS(60));
