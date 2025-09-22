@@ -56,7 +56,7 @@ K_TIMER_DEFINE(wifi_metrics_timer, wifi_metrics_timer_handler, NULL);
 K_WORK_DEFINE(wifi_metrics_work, wifi_metrics_work_handler);
 
 /* WiFi metrics collection function */
-static void collect_wifi_connection_metrics(void)
+static void collect_post_wifi_connection_metrics(void)
 {
 	struct net_if *iface = net_if_get_default();
 	struct wifi_iface_status status = {0};
@@ -111,7 +111,7 @@ static void wifi_metrics_timer_handler(struct k_timer *timer)
 /* Work handler runs in thread context */
 static void wifi_metrics_work_handler(struct k_work *work)
 {
-	collect_wifi_connection_metrics();
+	collect_post_wifi_connection_metrics();
 }
 
 /* Handle button presses and trigger faults that can be captured and sent to
@@ -214,9 +214,9 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 		LOG_INF("Stack metrics monitoring initialized");
 #endif
 
-		/* Start WiFi metrics timer - collect metrics every 60 seconds */
-		k_timer_start(&wifi_metrics_timer, K_SECONDS(60), K_SECONDS(60));
-		LOG_INF("WiFi metrics timer started (60 second interval)");
+		/* Start WiFi metrics timer - collect metrics every 3600 seconds */
+		k_timer_start(&wifi_metrics_timer, K_SECONDS(3600), K_SECONDS(3600));
+		LOG_INF("WiFi metrics timer started (3600 second interval)");
 		k_sem_give(&nw_connected_sem);
 		break;
 	case NET_EVENT_L4_DISCONNECTED:
@@ -245,7 +245,7 @@ int main(void)
 {
 	int err;
 
-	LOG_INF("Memfault sample has started");
+	LOG_INF("Memfault sample has started V1.0");
 
 	err = dk_buttons_init(button_handler);
 	if (err) {
