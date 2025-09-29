@@ -7,6 +7,7 @@
 / {
 	/* Configure the partition manager to use the mx25r64 external flash memory. */
 	chosen {
+		/delete-property/ zephyr,ipc_shm;
 		nordic,pm-ext-flash = &mx25r64;
 	};
 };

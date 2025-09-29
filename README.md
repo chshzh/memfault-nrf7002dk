@@ -1,11 +1,15 @@
 # Memfault nRF7002DKSample
 
-A Memfault integration sample for Nordic nRF7002DK, adapted from the original Nordic Semiconductor Memfault sample. This project demonstrates how to integrate Memfault's crash reporting and monitoring capabilities with Wi-Fi connectivity on the nRF7002DKplatform.
+A Memfault integration sample for Nordic nRF7002DK, adapted from the original Nordic Semiconductor Memfault sample. This project demonstrates how to integrate Memfault's crash reporting and monitoring capabilities with Wi-Fi connectivity on the nRF7002DK platform.
 
 ## Overview
 
-This sample application showcases:
-- Memfault SDK integration with nRF Connect SDK v3.1.0
+This sample application is built with:
+- nRF Connect SDK v3.1.1
+- Memfault Firmware SDK v1.30.0
+
+
+It showcases:
 - Wi-Fi connectivity using nRF7002dk
 - Crash reporting and coredump collection
 - Metrics collection and heartbeat reporting
@@ -28,6 +32,8 @@ This sample application showcases:
 ## Memory Layout
 
 This project uses a custom partition layout optimized for Memfault operation and Wi-Fi connectivity on the nRF7002DK.
+
+The values below are generated from `build/partitions.yml` in the latest build.
 
 ### Internal Flash Layout (1MB)
 
@@ -53,7 +59,7 @@ This project uses a custom partition layout optimized for Memfault operation and
 │         │                                     │                │
 │ 0xEE000 ├─────────────────────────────────────┤                │
 │         │       settings_storage              │ 8KB            │
-│         │      (WiFi Credentials)             │ (0x2000)       │
+│         │    (Wi-Fi Credentials & Settings)   │ (0x2000)       │
 │ 0xF0000 ├─────────────────────────────────────┤                │
 │         │                                     │                │
 │         │       memfault_storage              │ 64KB           │
@@ -113,7 +119,7 @@ This project uses a custom partition layout optimized for Memfault operation and
 
 ## Prerequisites
 
-- nRF Connect SDK v3.1.0 or later
+- nRF Connect SDK v3.1.1 (matching this sample)
 - nRF Connect for Desktop (recommended)
 - Memfault account and project setup
 - Wi-Fi network credentials
@@ -245,7 +251,7 @@ Modify files in the `boards/` directory to customize:
    - Review Memfault dashboard for quota limits
 
 3. **Build Issues**
-   - Ensure nRF Connect SDK v3.1.0+ is installed
+   - Ensure nRF Connect SDK v3.1.1 is installed
    - Verify west tool is properly configured
    - Check for missing dependencies
 
