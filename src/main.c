@@ -214,9 +214,9 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 		LOG_INF("Stack metrics monitoring initialized");
 #endif
 
-		/* Start WiFi metrics timer - collect metrics every 3600 seconds */
-		k_timer_start(&wifi_metrics_timer, K_SECONDS(3600), K_SECONDS(3600));
-		LOG_INF("WiFi metrics timer started (3600 second interval)");
+		/* Start WiFi metrics timer - collect metrics every 60 seconds */
+		k_timer_start(&wifi_metrics_timer, K_SECONDS(60), K_SECONDS(60));
+		LOG_INF("WiFi metrics timer started (60 second interval)");
 		k_sem_give(&nw_connected_sem);
 		break;
 	case NET_EVENT_L4_DISCONNECTED:
@@ -245,7 +245,7 @@ int main(void)
 {
 	int err;
 
-	LOG_INF("Memfault sample has started V1.0");
+	LOG_INF("Memfault sample has started! Version: %s", CONFIG_MEMFAULT_NCS_FW_VERSION);
 
 	err = dk_buttons_init(button_handler);
 	if (err) {

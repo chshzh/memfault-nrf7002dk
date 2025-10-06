@@ -1,4 +1,4 @@
-# Memfault nRF7002DKSample
+# Memfault nRF7002DK Sample
 
 A Memfault integration sample for Nordic nRF7002DK, adapted from the original Nordic Semiconductor Memfault sample. This project demonstrates how to integrate Memfault's crash reporting and monitoring capabilities with Wi-Fi connectivity on the nRF7002DK platform.
 
@@ -10,24 +10,15 @@ This sample application is built with:
 
 
 It showcases:
-- Wi-Fi connectivity using nRF7002dk
+- Wi-Fi connectivity using nRF7002DK
 - Crash reporting and coredump collection
-- Metrics collection and heartbeat reporting
-- HTTPS data upload to Memfault cloud
+- Custom Metrics collection and heartbeat reporting
+- Device OTA based on Memfault cloud
 
 ## Hardware Requirements
 
 - nRF7002DK
 - Wi-Fi network access for data upload
-
-## Features
-
-- **Crash Reporting**: Automatic coredump collection and upload
-- **Metrics Collection**: System health monitoring and custom metrics
-- **Wi-Fi Connectivity**: Robust Wi-Fi connection management
-- **Shell Interface**: Interactive debugging and testing commands
-- **Flash Storage**: Persistent storage for coredumps and metrics
-- **HTTP Upload**: Secure data transmission to Memfault cloud
 
 ## Memory Layout
 
@@ -117,160 +108,40 @@ The values below are generated from `build/partitions.yml` in the latest build.
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-## Prerequisites
+## Building and Usage
 
-- nRF Connect SDK v3.1.1 (matching this sample)
-- nRF Connect for Desktop (recommended)
-- Memfault account and project setup
-- Wi-Fi network credentials
+### Building Firmware
 
-## Setup
-
-### 1. Memfault Account Setup
-
-1. Create a Memfault account at [memfault.com](https://memfault.com)
-2. Create a new project in your Memfault dashboard
-3. Obtain your project key from the project settings
-
-### 2. Configuration
-
-1. Update `prj.conf` with your Memfault project key:
+1. Get your Memfault project key from the Memfault platform and set it in `CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key"` inside `prj.conf`.
+2. Build and flash the firmware:
+   ```sh
+   west build -b nrf7002dk_nrf5340_cpuapp
+   west flash --erase
    ```
-   CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key_here"
+3. After flashing, connect to the UART shell (115200 baud) and provide Wi-Fi credentials so the device can reconnect automatically on subsequent boots:
    ```
-
-2. Configure your device ID (optional):
+   uart:~$ wifi cred add -s YOURSSID -k 1 -p YOURPASSWORD
+   uart:~$ wifi cred auto_connect
+   [00:03:45.745,330] <inf> wpa_supp: wlan0: SME: Trying to authenticate with 82:cf:84:3c:f6:41 (SSID='YOURSSID' freq=2437 MHz)
+   [00:03:46.116,058] <inf> wpa_supp: wlan0: Trying to associate with 82:cf:84:3c:f6:41 (SSID='YOURSSID' freq=2437 MHz)
+   [00:03:46.174,163] <inf> wpa_supp: wlan0: Associated with 82:cf:84:3c:f6:41
+   [00:03:46.175,445] <inf> wpa_supp: wlan0: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+   [00:03:46.216,308] <inf> wpa_supp: wlan0: WPA: Key negotiation completed with 82:cf:84:3c:f6:41 [PTK=CCMP GTK=CCMP]
+   [00:03:46.216,796] <inf> wpa_supp: wlan0: CTRL-EVENT-CONNECTED - Connection to 82:cf:84:3c:f6:41 completed [id=0 id_str=]
+   Connected
    ```
-   CONFIG_MEMFAULT_NCS_DEVICE_ID="your_device_id"
-   ```
+4. Upload `build/memfault-nrf7002dk/zephyr/zephyr.elf` to **Symbol Files** on the Memfault platform. The device should now appear on the **Devices** list.
+5. Review **Timeline** or **Reports** to see the custom metrics collected every 60s or when `BUTTON1` is pressed. Periodic uploads occur according to `CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_INTERVAL_SECS`(60s in this sample). Enable Developer Mode in the Memfault dashboard if you need more frequent uploads during development.
 
-### 3. Wi-Fi Configuration
+### OTA Process
 
-Configure your Wi-Fi credentials either through:
-- Shell commands at runtime
-- Compile-time configuration in overlay files
-
-## Building and Flashing
-
-### Using west (recommended)
-
-```bash
-# Navigate to the project directory
-cd /path/to/memfault-nrf7002dk
-
-# Build for nRF7002dk
-west build -b nrf7002dk_nrf5340_cpuapp
-
-# Flash the application
-west flash
+1. Update `CONFIG_MEMFAULT_NCS_FW_VERSION="2.0.0"` (or your new version number) after modifying the firmware. See [Versioning Schemes](https://docs.memfault.com/docs/platform/software-version-hardware-version#version-schemes) for guidance.
+2. Build the new firmware and upload build/memfault-nrf7002dk/zephyr/zephyr.elf to **Symbol Files**, retrieve the OTA payload at `build/memfault-nrf7002dk/zephyr/zephyr.signed.bin`.
+3. In the Memfault platform, open the **OTA releases** page. Create a **Full Release** (e.g., version 2.0.0), add the OTA payload to the release, and activate it for the target cohort.
+4. Run `mflt_nrf fota` in the device shell to start downloading the new firmware. After the download completes, the device may take several minutes to apply the update and reboot. Check and confirm the new firmware version from device output:
 ```
-
-### Using nRF Connect for Desktop
-
-1. Open Programmer in nRF Connect for Desktop
-2. Connect your nRF7002dk
-3. Add the generated hex file from `build/zephyr/merged.hex`
-4. Write the firmware to the device
-
-## Usage
-
-### Shell Commands
-
-After flashing and connecting via serial terminal (115200 baud), you can use these commands:
-
+[00:00:00.261,535] <inf> memfault_sample: Memfault sample has started! Version: 2.0.0
 ```
-# Check Memfault status
-memfault get_core
-
-# Export collected data
-memfault export
-
-# Trigger a test crash (for testing purposes)
-memfault crash
-
-# Show device info
-memfault get_device_info
-
-# Connect to Wi-Fi (if not configured at compile time)
-net wifi connect "SSID" "password"
-```
-
-### Data Upload
-
-The application automatically uploads data to Memfault when:
-- A Wi-Fi connection is established
-- Periodic upload interval is reached
-- Manual export is triggered via shell
-
-## Project Structure
-
-```
-memfault-nrf7002dk/
-├── CMakeLists.txt              # Main CMake configuration
-├── prj.conf                    # Project configuration
-├── Kconfig                     # Custom Kconfig options
-├── README.md                   # This file
-├── sample.yaml                 # Sample metadata
-├── boards/                     # Board-specific configurations
-│   └── nrf7002dk_nrf5340_cpuapp.*
-├── config/                     # Memfault configuration files
-├── src/                        # Application source code
-└── overlay-*.conf              # Feature-specific overlays
-```
-
-## Customization
-
-### Adding Custom Metrics
-
-Edit `config/memfault_metrics_heartbeat_config.def` to define custom metrics:
-
-```c
-MEMFAULT_METRICS_KEY_DEFINE(your_custom_metric, kMemfaultMetricType_Unsigned)
-```
-
-### Board-Specific Configuration
-
-Modify files in the `boards/` directory to customize:
-- GPIO configurations
-- Peripheral settings
-- Memory layout
-- Power management
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Wi-Fi Connection Issues**
-   - Verify network credentials
-   - Check signal strength
-   - Ensure network supports the device
-
-2. **Memfault Upload Failures**
-   - Verify project key configuration
-   - Check internet connectivity
-   - Review Memfault dashboard for quota limits
-
-3. **Build Issues**
-   - Ensure nRF Connect SDK v3.1.1 is installed
-   - Verify west tool is properly configured
-   - Check for missing dependencies
-
-### Debug Output
-
-Enable verbose logging by setting in `prj.conf`:
-```
-CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL_DBG=y
-CONFIG_MEMFAULT_LOG_LEVEL_DBG=y
-```
-
-## Contributing
-
-This project is adapted for specific nRF7002DKusage. Contributions are welcome:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
 
 ## License
 
@@ -280,7 +151,7 @@ This project is based on Nordic Semiconductor's Memfault sample and follows the 
 
 - [Memfault Documentation](https://docs.memfault.com)
 - [nRF Connect SDK Documentation](https://docs.nordicsemi.com/category/software-nrf-connect-sdk)
-- [nRF7002DKUser Guide](https://docs.nordicsemi.com/category/hardware-development-kits)
+- [nRF7002DK User Guide](https://docs.nordicsemi.com/category/hardware-development-kits)
 
 ## Support
 
