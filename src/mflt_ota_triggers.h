@@ -17,12 +17,12 @@ extern "C" {
  *
  * Typically invoked from the button handler when the user presses button 2.
  */
-void ota_trigger_notify_button(void);
+void mflt_ota_triggers_notify_button(void);
 
 /**
  * @brief Notify the OTA trigger thread that network connectivity is available.
  */
-void ota_trigger_notify_connected(void);
+void mflt_ota_triggers_notify_connected(void);
 
 #ifdef __cplusplus
 }

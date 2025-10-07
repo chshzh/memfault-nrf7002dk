@@ -4,45 +4,45 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include "ota_trigger.h"
+#include "mflt_ota_triggers.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 #include <memfault/nrfconnect_port/fota.h>
 
-LOG_MODULE_REGISTER(ota_trigger, CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL);
+LOG_MODULE_REGISTER(mflt_ota_triggers, CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL);
 
 #ifndef OTA_CHECK_INTERVAL
 #define OTA_CHECK_INTERVAL K_MINUTES(60)
 #endif
 
-#define OTA_TRIGGER_THREAD_STACK_SIZE 4096
-#define OTA_TRIGGER_THREAD_PRIORITY   K_LOWEST_APPLICATION_THREAD_PRIO
+#define MFLT_OTA_TRIGGERS_THREAD_STACK_SIZE 4096
+#define MFLT_OTA_TRIGGERS_THREAD_PRIORITY   K_LOWEST_APPLICATION_THREAD_PRIO
 
-#define OTA_TRIGGER_BUTTON_FLAG  BIT(0)
-#define OTA_TRIGGER_CONNECT_FLAG BIT(1)
+#define MFLT_OTA_TRIGGERS_BUTTON_FLAG  BIT(0)
+#define MFLT_OTA_TRIGGERS_CONNECT_FLAG BIT(1)
 
-static K_SEM_DEFINE(ota_trigger_sem, 0, 1);
-static atomic_t ota_trigger_flags = ATOMIC_INIT(0);
+static K_SEM_DEFINE(mflt_ota_triggers_sem, 0, 1);
+static atomic_t mflt_ota_triggers_flags = ATOMIC_INIT(0);
 
 static const char *consume_trigger_context(void)
 {
-	atomic_val_t flags = atomic_set(&ota_trigger_flags, 0);
+	atomic_val_t flags = atomic_set(&mflt_ota_triggers_flags, 0);
 
 	if (flags == 0) {
 		return "manual";
 	}
 
-	if ((flags & OTA_TRIGGER_BUTTON_FLAG) && (flags & OTA_TRIGGER_CONNECT_FLAG)) {
+	if ((flags & MFLT_OTA_TRIGGERS_BUTTON_FLAG) && (flags & MFLT_OTA_TRIGGERS_CONNECT_FLAG)) {
 		return "button+connect";
 	}
 
-	if (flags & OTA_TRIGGER_BUTTON_FLAG) {
+	if (flags & MFLT_OTA_TRIGGERS_BUTTON_FLAG) {
 		return "button";
 	}
 
-	if (flags & OTA_TRIGGER_CONNECT_FLAG) {
+	if (flags & MFLT_OTA_TRIGGERS_CONNECT_FLAG) {
 		return "connect";
 	}
 
@@ -75,7 +75,7 @@ static void schedule_ota_check(const char *context)
 #endif
 }
 
-static void ota_trigger_thread(void *p1, void *p2, void *p3)
+static void mflt_ota_triggers_thread(void *p1, void *p2, void *p3)
 {
 	ARG_UNUSED(p1);
 	ARG_UNUSED(p2);
@@ -84,7 +84,7 @@ static void ota_trigger_thread(void *p1, void *p2, void *p3)
 	LOG_INF("Memfault OTA trigger thread started");
 
 	while (true) {
-		int ret = k_sem_take(&ota_trigger_sem, OTA_CHECK_INTERVAL);
+		int ret = k_sem_take(&mflt_ota_triggers_sem, OTA_CHECK_INTERVAL);
 
 		if (ret == 0) {
 			const char *context = consume_trigger_context();
@@ -97,28 +97,29 @@ static void ota_trigger_thread(void *p1, void *p2, void *p3)
 	}
 }
 
-K_THREAD_DEFINE(ota_trigger_tid, OTA_TRIGGER_THREAD_STACK_SIZE, ota_trigger_thread, NULL, NULL,
-		NULL, OTA_TRIGGER_THREAD_PRIORITY, 0, 0);
+K_THREAD_DEFINE(mflt_ota_triggers_tid, MFLT_OTA_TRIGGERS_THREAD_STACK_SIZE,
+		mflt_ota_triggers_thread, NULL, NULL, NULL, MFLT_OTA_TRIGGERS_THREAD_PRIORITY, 0,
+		0);
 
-void ota_trigger_notify_button(void)
+void mflt_ota_triggers_notify_button(void)
 {
-	atomic_or(&ota_trigger_flags, OTA_TRIGGER_BUTTON_FLAG);
+	atomic_or(&mflt_ota_triggers_flags, MFLT_OTA_TRIGGERS_BUTTON_FLAG);
 
-	if (k_sem_count_get(&ota_trigger_sem) == 0) {
-		k_sem_give(&ota_trigger_sem);
+	if (k_sem_count_get(&mflt_ota_triggers_sem) == 0) {
+		k_sem_give(&mflt_ota_triggers_sem);
 		LOG_INF("Memfault OTA check requested by button press");
 	} else {
 		LOG_DBG("Memfault OTA check already pending");
 	}
 }
 
-void ota_trigger_notify_connected(void)
+void mflt_ota_triggers_notify_connected(void)
 {
-	atomic_or(&ota_trigger_flags, OTA_TRIGGER_CONNECT_FLAG);
+	atomic_or(&mflt_ota_triggers_flags, MFLT_OTA_TRIGGERS_CONNECT_FLAG);
 
-	if (k_sem_count_get(&ota_trigger_sem) == 0) {
+	if (k_sem_count_get(&mflt_ota_triggers_sem) == 0) {
 		k_sleep(K_SECONDS(10));
-		k_sem_give(&ota_trigger_sem);
+		k_sem_give(&mflt_ota_triggers_sem);
 		LOG_INF("Memfault OTA check scheduled for network connect");
 	} else {
 		LOG_DBG("Memfault OTA check already pending");

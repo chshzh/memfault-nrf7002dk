@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#ifndef STACK_UNUSED_METRICS_H_
-#define STACK_UNUSED_METRICS_H_
+#ifndef MFLT_STACK_METRICS_H_
+#define MFLT_STACK_METRICS_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,10 +17,10 @@ extern "C" {
  * Registers various system threads for stack usage monitoring with Memfault.
  * Only available when CONFIG_MEMFAULT_NCS_STACK_METRICS is enabled.
  */
-void stack_unused_metrics_init(void);
+void mflt_stack_metrics_init(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* STACK_UNUSED_METRICS_H_ */
+#endif /* MFLT_STACK_METRICS_H_ */

@@ -19,13 +19,13 @@
 #include <dk_buttons_and_leds.h>
 #include <zephyr/sys/util.h>
 
-#include "ota_trigger.h"
+#include "mflt_ota_triggers.h"
 
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
 
 #if CONFIG_MEMFAULT_NCS_STACK_METRICS
-#include "stack_unused_metrics.h"
+#include "mflt_stack_metrics.h"
 #endif
 
 LOG_MODULE_REGISTER(memfault_sample, CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL);
@@ -141,7 +141,7 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 		}
 	} else if (buttons_pressed & DK_BTN2_MSK) {
 		LOG_INF("Button 2 pressed, scheduling Memfault OTA check");
-		ota_trigger_notify_button();
+		mflt_ota_triggers_notify_button();
 	} else if (has_changed & DK_BTN3_MSK) {
 		/* DK_BTN3_MSK is Switch 1 on nRF9160 DK. */
 		int err = MEMFAULT_METRIC_ADD(switch_1_toggle_count, 1);
@@ -207,7 +207,7 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 
 		/* Initialize stack metrics monitoring */
 #if CONFIG_MEMFAULT_NCS_STACK_METRICS
-		stack_unused_metrics_init();
+		mflt_stack_metrics_init();
 		LOG_INF("Stack metrics monitoring initialized");
 #endif
 
@@ -215,7 +215,7 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 		k_timer_start(&wifi_metrics_timer, K_SECONDS(60), K_SECONDS(60));
 		LOG_INF("WiFi metrics timer started (60 second interval)");
 		k_sem_give(&nw_connected_sem);
-		ota_trigger_notify_connected();
+		mflt_ota_triggers_notify_connected();
 		break;
 	case NET_EVENT_L4_DISCONNECTED:
 		LOG_INF("Network connectivity lost");

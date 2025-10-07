@@ -9,9 +9,9 @@
 #include <memfault/metrics/metrics.h>
 
 #include <memfault_ncs_metrics.h>
-#include "stack_unused_metrics.h"
+#include "mflt_stack_metrics.h"
 
-LOG_MODULE_REGISTER(stack_unused_metrics, CONFIG_MEMFAULT_NCS_LOG_LEVEL);
+LOG_MODULE_REGISTER(mflt_stack_metrics, CONFIG_MEMFAULT_NCS_LOG_LEVEL);
 
 #if CONFIG_MEMFAULT_NCS_STACK_METRICS
 static struct memfault_ncs_metrics_thread stack_metrics_threads[] = {
@@ -37,7 +37,7 @@ static struct memfault_ncs_metrics_thread stack_metrics_threads[] = {
 	{.thread_name = "logging", .key = MEMFAULT_METRICS_KEY(ncs_logging_unused_stack)},
 	{.thread_name = "main", .key = MEMFAULT_METRICS_KEY(ncs_main_unused_stack)}};
 
-void stack_unused_metrics_init(void)
+void mflt_stack_metrics_init(void)
 {
 	int err;
 

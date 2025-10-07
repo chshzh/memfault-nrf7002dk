@@ -4,11 +4,11 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
-target_sources(app PRIVATE main.c ota_trigger.c)
+target_sources(app PRIVATE main.c mflt_ota_triggers.c)
 
 # Add stack metrics monitoring when Memfault stack metrics are enabled
 if(CONFIG_MEMFAULT_NCS_STACK_METRICS)
-    target_sources(app PRIVATE stack_unused_metrics.c)
+    target_sources(app PRIVATE mflt_stack_metrics.c)
     # Add the NCS Memfault include directory
     target_include_directories(app PRIVATE ${ZEPHYR_NRF_MODULE_DIR}/modules/memfault-firmware-sdk/include)
 endif()

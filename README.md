@@ -149,7 +149,7 @@ The sample also provides automated OTA checks so you don't need to issue the she
 
 - **Button 2 (``DK_BTN2``)**: pressing the button notifies the firmware to run the same flow as `mflt_nrf fota`. A semaphore wakes the OTA thread immediately and the download starts if an update is available.
 - **Network connectivity**: each time L4 connectivity is established the OTA thread is nudged so newly connected devices immediately check for pending updates.
-- **Periodic background check**: the `ota_trigger` thread wakes every `OTA_CHECK_INTERVAL` (defaults to `K_MINUTES(60)` in `ota_trigger.c`) to poll Memfault for a new release. You can override this interval at build time by defining `OTA_CHECK_INTERVAL` (for example, via a compiler flag or by editing the source).
+- **Periodic background check**: the `mflt_ota_triggers` thread wakes every `OTA_CHECK_INTERVAL` (defaults to `K_MINUTES(60)` in `mflt_ota_triggers.c`) to poll Memfault for a new release. You can override this interval at build time by defining `OTA_CHECK_INTERVAL` (for example, via a compiler flag or by editing the source).
 
 All triggers use the shared Memfault FOTA client, so ensure your project is built with `CONFIG_MEMFAULT_FOTA=y`. If an OTA is already in flight, additional requests (button, connectivity, or periodic) are coalesced until the current attempt finishes.
 
