@@ -7,7 +7,6 @@
 / {
 	chosen {
 		/delete-property/ zephyr,ipc_shm;
-		zephyr,code-partition = &boot_partition;
 		nordic,pm-ext-flash = &mx25r64;
 	};
 };
