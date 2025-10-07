@@ -17,6 +17,9 @@
 #include <memfault/core/trace_event.h>
 #include <memfault/panics/coredump.h>
 #include <dk_buttons_and_leds.h>
+#include <zephyr/sys/util.h>
+
+#include "ota_trigger.h"
 
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -137,14 +140,8 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 			LOG_WRN("WiFi not connected, cannot collect metrics");
 		}
 	} else if (buttons_pressed & DK_BTN2_MSK) {
-		volatile uint32_t i;
-
-		LOG_WRN("Division by zero will now be triggered");
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdiv-by-zero"
-		i = 1 / 0;
-#pragma GCC diagnostic pop
-		ARG_UNUSED(i);
+		LOG_INF("Button 2 pressed, scheduling Memfault OTA check");
+		ota_trigger_notify_button();
 	} else if (has_changed & DK_BTN3_MSK) {
 		/* DK_BTN3_MSK is Switch 1 on nRF9160 DK. */
 		int err = MEMFAULT_METRIC_ADD(switch_1_toggle_count, 1);
@@ -218,6 +215,7 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 		k_timer_start(&wifi_metrics_timer, K_SECONDS(60), K_SECONDS(60));
 		LOG_INF("WiFi metrics timer started (60 second interval)");
 		k_sem_give(&nw_connected_sem);
+		ota_trigger_notify_connected();
 		break;
 	case NET_EVENT_L4_DISCONNECTED:
 		LOG_INF("Network connectivity lost");

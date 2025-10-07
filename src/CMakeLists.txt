@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
-target_sources(app PRIVATE main.c)
+target_sources(app PRIVATE main.c ota_trigger.c)
 
 # Add stack metrics monitoring when Memfault stack metrics are enabled
 if(CONFIG_MEMFAULT_NCS_STACK_METRICS)

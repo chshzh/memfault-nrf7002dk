@@ -143,6 +143,16 @@ The values below are generated from `build/partitions.yml` in the latest build.
 [00:00:00.261,535] <inf> memfault_sample: Memfault sample has started! Version: 2.0.0
 ```
 
+### Automatic OTA Triggers
+
+The sample also provides automated OTA checks so you don't need to issue the shell command manually every time:
+
+- **Button 2 (``DK_BTN2``)**: pressing the button notifies the firmware to run the same flow as `mflt_nrf fota`. A semaphore wakes the OTA thread immediately and the download starts if an update is available.
+- **Network connectivity**: each time L4 connectivity is established the OTA thread is nudged so newly connected devices immediately check for pending updates.
+- **Periodic background check**: the `ota_trigger` thread wakes every `OTA_CHECK_INTERVAL` (defaults to `K_MINUTES(60)` in `ota_trigger.c`) to poll Memfault for a new release. You can override this interval at build time by defining `OTA_CHECK_INTERVAL` (for example, via a compiler flag or by editing the source).
+
+All triggers use the shared Memfault FOTA client, so ensure your project is built with `CONFIG_MEMFAULT_FOTA=y`. If an OTA is already in flight, additional requests (button, connectivity, or periodic) are coalesced until the current attempt finishes.
+
 ## License
 
 This project is based on Nordic Semiconductor's Memfault sample and follows the same licensing terms (LicenseRef-Nordic-5-Clause).
