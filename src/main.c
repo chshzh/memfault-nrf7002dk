@@ -14,6 +14,7 @@
 #include <memfault/metrics/metrics.h>
 #include <memfault/ports/zephyr/http.h>
 #include <memfault/core/data_packetizer.h>
+#include <memfault/core/log.h>
 #include <memfault/core/trace_event.h>
 #include <memfault/panics/coredump.h>
 #include <dk_buttons_and_leds.h>
@@ -100,6 +101,8 @@ static void collect_post_wifi_connection_metrics(void)
 
 	/* Also trigger a heartbeat to capture the current metrics */
 	memfault_metrics_heartbeat_debug_trigger();
+	/* Flush the log ring buffer into the Memfault data recorder. */
+	memfault_log_trigger_collection();
 }
 
 /* Timer handler runs in ISR context, so dispatch to work queue */
@@ -183,6 +186,9 @@ static void on_connect(void)
 	/* Trigger collection of heartbeat data. */
 	memfault_metrics_heartbeat_debug_trigger();
 
+	/* Flush the log ring buffer into the Memfault data recorder. */
+	memfault_log_trigger_collection();
+
 	/* Check if there is any data available to be sent. */
 	if (!memfault_packetizer_data_available()) {
 		LOG_DBG("There was no data to be sent");
@@ -254,6 +260,10 @@ int main(void)
 			LOG_INF("New OTA FW confirmed!");
 		}
 	}
+
+	/* Lower the Memfault log capture threshold so debug logs are stored & uploaded, which need
+	 * set CONFIG_MEMFAULT_LOGGING_RAM_SIZE bigger enough*/
+	memfault_log_set_min_save_level(kMemfaultPlatformLogLevel_Debug);
 
 	err = dk_buttons_init(button_handler);
 	if (err) {
