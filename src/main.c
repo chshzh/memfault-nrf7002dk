@@ -18,6 +18,7 @@
 #include <memfault/panics/coredump.h>
 #include <dk_buttons_and_leds.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/dfu/mcuboot.h>
 
 #include "mflt_ota_triggers.h"
 
@@ -244,6 +245,15 @@ int main(void)
 	int err;
 
 	LOG_INF("Memfault sample has started! Version: %s", CONFIG_MEMFAULT_NCS_FW_VERSION);
+
+	if (!boot_is_img_confirmed()) {
+		err = boot_write_img_confirmed();
+		if (err) {
+			LOG_ERR("New OTA FW confirm failed: %d, rollback to previous version", err);
+		} else {
+			LOG_INF("New OTA FW confirmed!");
+		}
+	}
 
 	err = dk_buttons_init(button_handler);
 	if (err) {
