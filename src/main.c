@@ -95,6 +95,7 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 			LOG_INF("Button 1 short press detected, triggering Memfault heartbeat");
 			if (wifi_connected) {
 				memfault_metrics_heartbeat_debug_trigger();
+				memfault_zephyr_port_post_data();
 			} else {
 				LOG_WRN("WiFi not connected, cannot collect metrics");
 			}
