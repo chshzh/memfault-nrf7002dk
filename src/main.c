@@ -38,12 +38,27 @@ LOG_MODULE_REGISTER(memfault_sample, CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL);
 #define L4_EVENT_MASK         (NET_EVENT_L4_CONNECTED | NET_EVENT_L4_DISCONNECTED)
 #define CONN_LAYER_EVENT_MASK (NET_EVENT_CONN_IF_FATAL_ERROR)
 
+#define LONG_PRESS_THRESHOLD_MS 3000
+
 static K_SEM_DEFINE(net_conn_sem, 0, 1);
 static bool wifi_connected = false;
+
+static int64_t button_press_ts_btn1;
+static int64_t button_press_ts_btn2;
 
 /* Zephyr NET management event callback structures. */
 static struct net_mgmt_event_callback l4_cb;
 static struct net_mgmt_event_callback conn_cb;
+
+/* Recursive Fibonacci calculation used to trigger stack overflow. */
+static int fib(int n)
+{
+	if (n <= 1) {
+		return n;
+	}
+
+	return fib(n - 1) + fib(n - 2);
+}
 
 void memfault_metrics_heartbeat_collect_data(void)
 {
@@ -65,21 +80,49 @@ void memfault_metrics_heartbeat_collect_data(void)
 static void button_handler(uint32_t button_states, uint32_t has_changed)
 {
 	uint32_t buttons_pressed = has_changed & button_states;
+	uint32_t buttons_released = has_changed & ~button_states;
 
 	if (buttons_pressed & DK_BTN1_MSK) {
-		// LOG_WRN("Stack overflow will now be triggered");
-		// fib(10000);
-		/* Manually trigger a heartbeat so Wi-Fi metrics are sampled */
-		LOG_INF("Manually triggering WiFi metrics collection");
-		if (wifi_connected) {
-			memfault_metrics_heartbeat_debug_trigger();
+		button_press_ts_btn1 = k_uptime_get();
+	}
+
+	if (buttons_released & DK_BTN1_MSK) {
+		int64_t duration = k_uptime_get() - button_press_ts_btn1;
+		if (duration >= LONG_PRESS_THRESHOLD_MS) {
+			LOG_WRN("Stack overflow will now be triggered");
+			fib(10000);
 		} else {
-			LOG_WRN("WiFi not connected, cannot collect metrics");
+			LOG_INF("Button 1 short press detected, triggering Memfault heartbeat");
+			if (wifi_connected) {
+				memfault_metrics_heartbeat_debug_trigger();
+			} else {
+				LOG_WRN("WiFi not connected, cannot collect metrics");
+			}
 		}
-	} else if (buttons_pressed & DK_BTN2_MSK) {
-		LOG_INF("Button 2 pressed, scheduling Memfault OTA check");
-		mflt_ota_triggers_notify_button();
-	} else if (has_changed & DK_BTN3_MSK) {
+	}
+
+	if (buttons_pressed & DK_BTN2_MSK) {
+		button_press_ts_btn2 = k_uptime_get();
+	}
+
+	if (buttons_released & DK_BTN2_MSK) {
+		int64_t duration = k_uptime_get() - button_press_ts_btn2;
+		if (duration >= LONG_PRESS_THRESHOLD_MS) {
+			volatile uint32_t i;
+
+			LOG_WRN("Division by zero will now be triggered");
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdiv-by-zero"
+			i = 1 / 0;
+#pragma GCC diagnostic pop
+			ARG_UNUSED(i);
+		} else {
+			LOG_INF("Button 2 short press detected, scheduling Memfault OTA check");
+			mflt_ota_triggers_notify_button();
+		}
+	}
+
+	if (buttons_pressed & DK_BTN3_MSK) {
 		/* DK_BTN3_MSK is Switch 1 on nRF9160 DK. */
 		int err = MEMFAULT_METRIC_ADD(switch_1_toggle_count, 1);
 		if (err) {
@@ -87,7 +130,9 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 		} else {
 			LOG_INF("switch_1_toggle_count incremented");
 		}
-	} else if (has_changed & DK_BTN4_MSK) {
+	}
+
+	if (buttons_pressed & DK_BTN4_MSK) {
 		/* DK_BTN4_MSK is Switch 2 on nRF9160 DK. */
 		MEMFAULT_TRACE_EVENT_WITH_LOG(switch_2_toggled, "Switch state: %d",
 					      buttons_pressed & DK_BTN4_MSK ? 1 : 0);

@@ -136,7 +136,7 @@ Note about Memfault storage usage
    Connected
    ```
 4. Upload `build/memfault-nrf7002dk/zephyr/zephyr.elf` to **Symbol Files** on the Memfault platform. The device should now appear on the **Devices** list.
-5. Review **Timeline** or **Reports** to see the custom metrics collected every 60s or when `BUTTON1` is pressed. Periodic uploads occur according to `CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_INTERVAL_SECS`(60s in this sample). Enable Developer Mode in the Memfault dashboard if you need more frequent uploads during development.
+5. Review **Timeline** or **Reports** to see the custom metrics collected every 60s or when `BUTTON1` is pressed. Periodic uploads occur according to `CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_INTERVAL_SECS` (30s in this sample). Enable Developer Mode in the Memfault dashboard if you need more frequent uploads during development.
 
 ### OTA Process
 
@@ -148,11 +148,24 @@ Note about Memfault storage usage
 [00:00:00.261,535] <inf> memfault_sample: Memfault sample has started! Version: 2.0.0
 ```
 
+### Button & Switch Behavior
+
+The on-board buttons reuse the Nordic Memfault sample semantics while adding a long-press option for common Memfault workflows:
+
+- **Button 1 (``DK_BTN1``)**
+   - *Short press (< 3 s)*: Manually triggers a Memfault heartbeat collection. If the device is offline, the request is skipped with a warning.
+   - *Long press (≥ 3 s)*: Purposefully overflows the stack (`fib(10000)`) so you can capture a coredump and verify the Memfault crash pipeline end-to-end.
+- **Button 2 (``DK_BTN2``)**
+   - *Short press (< 3 s)*: Kicks off the same OTA flow as the `mflt_nrf fota` shell command by nudging the OTA worker thread.
+   - *Long press (≥ 3 s)*: Triggers a divide-by-zero fault to generate a second style of crash artifact for testing.
+- **Switch 1 (``DK_BTN3``)**: Increments the custom metric `switch_1_toggle_count` via `MEMFAULT_METRIC_ADD` each time it changes state.
+- **Switch 2 (``DK_BTN4``)**: Emits a `switch_2_toggled` trace event with the current state and stores the message using Memfault logging.
+
 ### Automatic OTA Triggers
 
 The sample also provides automated OTA checks so you don't need to issue the shell command manually every time:
 
-- **Button 2 (``DK_BTN2``)**: pressing the button notifies the firmware to run the same flow as `mflt_nrf fota`. A semaphore wakes the OTA thread immediately and the download starts if an update is available.
+- **Button 2 (``DK_BTN2``)**: pressing the button (short press) notifies the firmware to run the same flow as `mflt_nrf fota`. A semaphore wakes the OTA thread immediately and the download starts if an update is available.
 - **Network connectivity**: each time L4 connectivity is established the OTA thread is nudged so newly connected devices immediately check for pending updates.
 - **Periodic background check**: the `mflt_ota_triggers` thread wakes every `OTA_CHECK_INTERVAL` (defaults to `K_MINUTES(60)` in `mflt_ota_triggers.c`) to poll Memfault for a new release. You can override this interval at build time by defining `OTA_CHECK_INTERVAL` (for example, via a compiler flag or by editing the source).
 
