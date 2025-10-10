@@ -15,6 +15,7 @@
 #include <memfault/ports/zephyr/http.h>
 #include <memfault/core/data_packetizer.h>
 #include <memfault/core/log.h>
+#include <memfault/core/log.h>
 #include <memfault/core/trace_event.h>
 #include <memfault/panics/coredump.h>
 #include <memfault_ncs.h>
