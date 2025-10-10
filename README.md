@@ -54,7 +54,7 @@ The values below are generated from `build/partitions.yml` in the latest build.
 │ 0xF0000 ├─────────────────────────────────────┤                │
 │         │                                     │                │
 │         │       memfault_storage              │ 64KB           │
-│         │     (Crash Dumps & Metrics)         │ (0x10000)      │
+│         │     (Crash Dumps — coredumps)       │ (0x10000)      │
 │         │                                     │                │
 │ 0x100000└─────────────────────────────────────┘                │
 └────────────────────────────────────────────────────────────────┘
@@ -95,6 +95,11 @@ The values below are generated from `build/partitions.yml` in the latest build.
 ### SRAM Layout (512KB)
 
 ```
+
+Note about Memfault storage usage
+- The `memfault_storage` fixed partition (shown above) is allocated in internal flash and used by the Memfault coredump implementation to persist crash dumps across power cycles.
+- In this sample, metrics and event data are collected into an in-RAM event buffer by default. Non-volatile (flash-backed) event storage for metrics is optional and is only used if you enable and provide a platform implementation of the Memfault non-volatile event storage API (see `components/include/memfault/core/platform/nonvolatile_event_storage.h`).
+- The partition is available for use by such an implementation (or other user data) but metrics will not be written there unless you implement and enable the NV event storage glue that writes into `memfault_storage`.
 ┌──────────────────────────────────────────────────────────────────┐
 │                    nRF5340 SRAM (512KB)                          │
 ├──────────────────────────────────────────────────────────────────┤
@@ -160,6 +165,7 @@ This project is based on Nordic Semiconductor's Memfault sample and follows the 
 ## Resources
 
 - [Memfault Documentation](https://docs.memfault.com)
+- [Memfault Non-Volatile Event Storage (metrics)](https://docs.memfault.com/docs/mcu/metrics-api#non-volatile-event-storage)
 - [nRF Connect SDK Documentation](https://docs.nordicsemi.com/category/software-nrf-connect-sdk)
 - [nRF7002DK User Guide](https://docs.nordicsemi.com/category/hardware-development-kits)
 
