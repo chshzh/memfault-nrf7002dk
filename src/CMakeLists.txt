@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
-target_sources(app PRIVATE main.c mflt_ota_triggers.c)
+target_sources(app PRIVATE main.c mflt_ota_triggers.c mflt_wifi_metrics.c)
 
 # Add stack metrics monitoring when Memfault stack metrics are enabled
 if(CONFIG_MEMFAULT_NCS_STACK_METRICS)
