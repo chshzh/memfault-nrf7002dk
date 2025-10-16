@@ -9,23 +9,9 @@
 	chosen {
 		/delete-property/ zephyr,ipc_shm;
 		nordic,pm-ext-flash = &mx25r64;
-		zephyr,settings-partition = &settings_storage;
 	};
 };
 
 &mx25r64 {
 	status = "okay";
-};
-
-&flash0 {
-	partitions {
-		compatible = "fixed-partitions";
-		#address-cells = <1>;
-		#size-cells = <1>;
-
-		settings_storage: partition@ee000 {
-			label = "settings";
-			reg = <0x000ee000 0x00002000>;
-		};
-	};
 };
