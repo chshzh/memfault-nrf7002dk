@@ -117,7 +117,7 @@ Note about Memfault storage usage
 
 ### Building Firmware
 
-1. Get your Memfault project key from the Memfault platform and set it in `CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key"` inside `prj.conf`.
+1. Retrieve the project key from your Memfault **Project Settings** page and set it in `CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key"` inside `prj.conf`.
 2. Build and flash the firmware:
    ```sh
    west build -b nrf7002dk_nrf5340_cpuapp
@@ -137,6 +137,17 @@ Note about Memfault storage usage
    ```
 4. Upload `build/memfault-nrf7002dk/zephyr/zephyr.elf` to **Symbol Files** on the Memfault platform. The device should now appear on the **Devices** list.
 5. Review **Timeline** or **Reports** to see the custom metrics collected every 60s or when `BUTTON1` is pressed. Periodic uploads occur according to `CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_INTERVAL_SECS` (30s in this sample). Enable Developer Mode in the Memfault dashboard if you need more frequent uploads during development.
+
+### Onboarding a Device
+
+Follow these steps to bring a development board online in your Memfault organization:
+
+1. Upload `build/memfault/zephyr/zephyr.elf` to the symbol file uploader.
+2. Flash the image to the nRF7002 DK. When the device reboots, connect over UART and provision Wi-Fi credentials:
+   ```sh
+   wifi connect -k 1 -s <ssid> -p <pw>
+   ```
+3. Confirm the heartbeat was received under your device page **Reports** tab. 
 
 ### OTA Process
 
