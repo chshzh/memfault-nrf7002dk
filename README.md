@@ -6,7 +6,9 @@ A Memfault integration sample for Nordic nRF7002DK, adapted from the original No
 
 This sample application is built with:
 - nRF Connect SDK v3.1.1
-- Memfault Firmware SDK v1.30.0
+- Memfault Firmware SDK v1.30.3 
+
+Note: The default Memfault Firmware SDK that ships with NCS v3.1.1 is v1.26.0. See the "Updating the memfault-firmware-sdk version" section below if you need to change it to a newer tag such as v1.30.3.
 
 
 It showcases:
@@ -91,15 +93,14 @@ The values below are generated from `build/partitions.yml` in the latest build.
 │ 0x800000└─────────────────────────────────────┘                │
 └────────────────────────────────────────────────────────────────┘
 ```
-
-### SRAM Layout (512KB)
-
-```
-
 Note about Memfault storage usage
 - The `memfault_storage` fixed partition (shown above) is allocated in internal flash and used by the Memfault coredump implementation to persist crash dumps across power cycles.
 - In this sample, metrics and event data are collected into an in-RAM event buffer by default. Non-volatile (flash-backed) event storage for metrics is optional and is only used if you enable and provide a platform implementation of the Memfault non-volatile event storage API (see `components/include/memfault/core/platform/nonvolatile_event_storage.h`).
 - The partition is available for use by such an implementation (or other user data) but metrics will not be written there unless you implement and enable the NV event storage glue that writes into `memfault_storage`.
+
+### SRAM Layout (512KB)
+
+```
 ┌──────────────────────────────────────────────────────────────────┐
 │                    nRF5340 SRAM (512KB)                          │
 ├──────────────────────────────────────────────────────────────────┤
@@ -115,12 +116,12 @@ Note about Memfault storage usage
 
 ## Building and Usage
 
-### Building Firmware
+### Building Firmware and Onboarding a Device
 
 1. Retrieve the project key from your Memfault **Project Settings** page and set it in `CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key"` inside `prj.conf`.
 2. Build and flash the firmware:
    ```sh
-   west build -b nrf7002dk_nrf5340_cpuapp
+   west build -b nrf7002dk/nrf5340/cpuapp
    west flash --erase
    ```
 3. After flashing, connect to the UART shell (115200 baud) and provide Wi-Fi credentials so the device can reconnect automatically on subsequent boots:
@@ -136,18 +137,7 @@ Note about Memfault storage usage
    Connected
    ```
 4. Upload `build/memfault-nrf7002dk/zephyr/zephyr.elf` to **Symbol Files** on the Memfault platform. The device should now appear on the **Devices** list.
-5. Review **Timeline** or **Reports** to see the custom metrics collected every 60s or when `BUTTON1` is pressed. Periodic uploads occur according to `CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_INTERVAL_SECS` (30s in this sample). Enable Developer Mode in the Memfault dashboard if you need more frequent uploads during development.
-
-### Onboarding a Device
-
-Follow these steps to bring a development board online in your Memfault organization:
-
-1. Upload `build/memfault/zephyr/zephyr.elf` to the symbol file uploader.
-2. Flash the image to the nRF7002 DK. When the device reboots, connect over UART and provision Wi-Fi credentials:
-   ```sh
-   wifi connect -k 1 -s <ssid> -p <pw>
-   ```
-3. Confirm the heartbeat was received under your device page **Reports** tab. 
+5. Review **Timeline** or **Reports** to see the Metrics updates when `BUTTON1` is pressed. Periodic uploads occur according to `CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_INTERVAL_SECS` (900s in this sample). Enable Developer Mode in the Memfault dashboard if you need more frequent uploads during development.
 
 ### OTA Process
 
@@ -159,7 +149,7 @@ Follow these steps to bring a development board online in your Memfault organiza
 [00:00:00.261,535] <inf> memfault_sample: Memfault sample has started! Version: 2.0.0
 ```
 
-### Button & Switch Behavior
+### Button Behavior
 
 The on-board buttons reuse the Nordic Memfault sample semantics while adding a long-press option for common Memfault workflows:
 
@@ -169,8 +159,6 @@ The on-board buttons reuse the Nordic Memfault sample semantics while adding a l
 - **Button 2 (``DK_BTN2``)**
    - *Short press (< 3 s)*: Kicks off the same OTA flow as the `mflt_nrf fota` shell command by nudging the OTA worker thread.
    - *Long press (≥ 3 s)*: Triggers a divide-by-zero fault to generate a second style of crash artifact for testing.
-- **Switch 1 (``DK_BTN3``)**: Increments the custom metric `switch_1_toggle_count` via `MEMFAULT_METRIC_ADD` each time it changes state.
-- **Switch 2 (``DK_BTN4``)**: Emits a `switch_2_toggled` trace event with the current state and stores the message using Memfault logging.
 
 ### Automatic OTA Triggers
 
@@ -203,3 +191,37 @@ For general Memfault support:
 
 For nRF Connect SDK support:
 - Visit [Nordic DevZone](https://devzone.nordicsemi.com)
+
+## Updating the memfault-firmware-sdk version
+
+If you need to change which memfault firmware SDK version the NCS workspace uses, update the NCS manifest and run `west update` from the top-level NCS workspace. The memfault project entry lives in `nrf/west.yml` as `memfault-firmware-sdk` (path: `modules/lib/memfault-firmware-sdk`).
+
+Quick steps (example: set to tag v1.30.3):
+
+1. Edit the manifest file and change the `revision` for `memfault-firmware-sdk` to `1.30.3`:
+
+```yaml
+- name: memfault-firmware-sdk
+   path: modules/lib/memfault-firmware-sdk
+   revision: 1.30.3
+   remote: memfault
+```
+
+2. From the NCS workspace root (adjust path to your workspace) run:
+
+```bash
+cd /opt/nordic/ncs/v3.1.1
+west update
+```
+
+3. Verify the module now points at the requested tag:
+
+```bash
+cd /opt/nordic/ncs/v3.1.1/modules/lib/memfault-firmware-sdk
+git log   
+commit 67244e00d416f3036535398e089021589c63c86b (HEAD, tag: 1.30.3, manifest-rev)
+Author: Memfault Inc <hello@memfault.com>
+Date:   Mon Oct 27 16:09:54 2025 +0000
+
+    Memfault Firmware SDK 1.30.3 (Build 15552)
+```
