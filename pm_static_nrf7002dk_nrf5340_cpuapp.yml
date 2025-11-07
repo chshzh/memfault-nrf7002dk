@@ -1,27 +1,27 @@
 mcuboot:
   address: 0x0
-  size: 0x8000
+  size: 0xc000
   region: flash_primary
 mcuboot_pad:
-  address: 0x8000
+  address: 0xc000
   size: 0x200
 app:
-  address: 0x8200
-  size: 0xe5e00
+  address: 0xc200
+  size: 0xe1e00
 mcuboot_primary:
   orig_span: &id001
   - mcuboot_pad
   - app
   span: *id001
-  address: 0x8000
-  size: 0xe6000
+  address: 0xc000
+  size: 0xe2000
   region: flash_primary
 mcuboot_primary_app:
   orig_span: &id002
   - app
   span: *id002
-  address: 0x8200
-  size: 0xe5e00
+  address: 0xc200
+  size: 0xe1e00
 settings_storage:
   address: 0xee000
   size: 0x2000
@@ -32,12 +32,36 @@ memfault_storage:
   region: flash_primary
 mcuboot_secondary:
   address: 0x0
-  size: 0xe6000
+  size: 0xe2000
+  device: MX25R64
+  region: external_flash
+nrf70_wifi_fw_mcuboot_pad:
+  address: 0xe2000
+  size: 0x200
+  device: MX25R64
+  region: external_flash
+nrf70_wifi_fw:
+  address: 0xe2200
+  size: 0x20000
+  device: MX25R64
+  region: external_flash
+mcuboot_primary_1:
+  orig_span: &id003
+  - nrf70_wifi_fw_mcuboot_pad
+  - nrf70_wifi_fw
+  span: *id003
+  address: 0xe2000
+  size: 0x21000
+  device: MX25R64
+  region: external_flash
+mcuboot_secondary_1:
+  address: 0x103000
+  size: 0x21000
   device: MX25R64
   region: external_flash
 external_flash:
-  address: 0xe6000
-  size: 0x71a000
+  address: 0x124000
+  size: 0x6dc000
   device: MX25R64
   region: external_flash
 
