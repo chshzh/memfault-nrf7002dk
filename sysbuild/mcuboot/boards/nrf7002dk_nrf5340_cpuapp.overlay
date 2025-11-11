@@ -3,10 +3,20 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+&mx25r64 {
+	status = "okay";
+};
 
 / {
 	chosen {
 		/delete-property/ zephyr,ipc_shm;
 		nordic,pm-ext-flash = &mx25r64;
 	};
+};
+
+/ {
+  aliases {
+		mcuboot-button0 = &button1;
+		mcuboot-led0 = &led1;
+  };
 };
