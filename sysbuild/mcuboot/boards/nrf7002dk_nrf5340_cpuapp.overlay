@@ -20,3 +20,17 @@
 		mcuboot-led0 = &led1;
   };
 };
+
+/* Configure CDC ACM for serial recovery over USB */
+&zephyr_udc0 {
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
+
+/* Redirect MCUmgr to USB CDC so UART console can stay enabled for logs */
+/ {
+	chosen {
+		zephyr,uart-mcumgr = &cdc_acm_uart0;
+	};
+};
