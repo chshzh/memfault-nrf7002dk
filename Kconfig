@@ -11,3 +11,12 @@ endmenu
 module = MEMFAULT_SAMPLE
 module-str = Memfault sample
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+config BLE_PROV_ENABLED
+	bool "Enable BLE provisioning for WiFi credentials"
+	depends on BT_WIFI_PROV
+	default n
+	help
+	  Enable Bluetooth LE based WiFi provisioning feature.
+	  This allows WiFi credentials to be configured via BLE
+	  using the nRF Wi-Fi Provisioner mobile app.

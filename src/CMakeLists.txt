@@ -13,4 +13,9 @@ if(CONFIG_MEMFAULT_NCS_STACK_METRICS)
     target_include_directories(app PRIVATE ${ZEPHYR_NRF_MODULE_DIR}/modules/memfault-firmware-sdk/include)
 endif()
 
+# Add BLE provisioning when enabled
+if(CONFIG_BLE_PROV_ENABLED)
+    target_sources(app PRIVATE ble_provisioning.c)
+endif()
+
 target_include_directories(app PRIVATE .)

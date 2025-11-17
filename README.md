@@ -8,11 +8,12 @@ This sample application is built with:
 - nRF Connect SDK v3.1.1
 - Memfault Firmware SDK v1.30.3 
 
-Note: The default Memfault Firmware SDK that ships with NCS v3.1.1 is v1.26.0. See the "Updating the memfault-firmware-sdk version" section below if you need to change it to a newer tag such as v1.30.3.
+Note: The default Memfault Firmware SDK that ships with NCS v3.1.1 is v1.26.0. This project has been updated to use v1.30.3 for improved features and bug fixes. See the "Updating the memfault-firmware-sdk version" section below for instructions on changing SDK versions.
 
 
 It showcases:
 - Wi-Fi connectivity using nRF7002DK
+- BLE-based WiFi provisioning (optional)
 - Crash reporting and coredump collection
 - Custom Metrics collection and heartbeat reporting
 - Device OTA based on Memfault cloud
@@ -21,6 +22,40 @@ It showcases:
 
 - nRF7002DK
 - Wi-Fi network access for data upload
+
+## Updating the memfault-firmware-sdk version
+
+If you need to change which Memfault Firmware SDK version the NCS workspace uses, update the NCS manifest and run `west update` from the top-level NCS workspace. The Memfault project entry lives in `nrf/west.yml` as `memfault-firmware-sdk` (path: `modules/lib/memfault-firmware-sdk`).
+
+Quick steps (example: set to tag v1.30.3):
+
+1. Edit the manifest file and change the `revision` for `memfault-firmware-sdk` to `1.30.3`:
+
+```yaml
+- name: memfault-firmware-sdk
+   path: modules/lib/memfault-firmware-sdk
+   revision: 1.30.3
+   remote: memfault
+```
+
+2. From the NCS workspace root (adjust path to your workspace) run:
+
+```bash
+cd /opt/nordic/ncs/v3.1.1
+west update
+```
+
+3. Verify the module now points at the requested tag:
+
+```bash
+cd /opt/nordic/ncs/v3.1.1/modules/lib/memfault-firmware-sdk
+git log   
+commit 67244e00d416f3036535398e089021589c63c86b (HEAD, tag: 1.30.3, manifest-rev)
+Author: Memfault Inc <hello@memfault.com>
+Date:   Mon Oct 27 16:09:54 2025 +0000
+
+    Memfault Firmware SDK 1.30.3 (Build 15552)
+```
 
 ## Memory Layout
 
@@ -44,7 +79,7 @@ The values below are generated from `build/partitions.yml` in the latest build.
 │         │                                     │                │
 │         │                                     │                │
 │         │                                     │                │
-│         │              app                    │ 918KB          │
+│         │              app                    │ 919KB          │
 │         │        (Main Application)           │ (0xE5E00)      │
 │         │                                     │                │
 │         │                                     │                │
@@ -72,7 +107,7 @@ The values below are generated from `build/partitions.yml` in the latest build.
 │         │                                     │                │
 │         │                                     │                │
 │         │                                     │                │
-│         │        mcuboot_secondary            │ 918KB          │
+│         │        mcuboot_secondary            │ 919KB          │
 │         │      (App Update Slot)              │ (0xE6000)      │
 │         │                                     │                │
 │         │                                     │                │
@@ -114,9 +149,11 @@ Note about Memfault storage usage
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-## Building and Usage
+## Building Firmware
 
-### Building Firmware and Onboarding a Device
+### Option 1: Building with Wi-Fi Shell Provisioning
+
+Follow these steps for the standard build that uses shell commands to configure WiFi:
 
 1. Retrieve the project key from your Memfault **Project Settings** page and set it in `CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key"` inside `prj.conf`.
 2. Build and flash the firmware:
@@ -136,10 +173,47 @@ Note about Memfault storage usage
    [00:03:46.216,796] <inf> wpa_supp: wlan0: CTRL-EVENT-CONNECTED - Connection to 82:cf:84:3c:f6:41 completed [id=0 id_str=]
    Connected
    ```
-4. Upload `build/memfault-nrf7002dk/zephyr/zephyr.elf` to **Symbol Files** on the Memfault platform. The device should now appear on the **Devices** list.
-5. Review **Timeline** or **Reports** to see the Metrics updates when `BUTTON1` is pressed. Periodic uploads occur according to `CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_INTERVAL_SECS` (900s in this sample). Enable Developer Mode in the Memfault dashboard if you need more frequent uploads during development.
 
-### OTA Process
+### Option 2: Building with BLE Provisioning
+
+The BLE provisioning feature allows you to configure WiFi credentials wirelessly via Bluetooth LE using the nRF Wi-Fi Provisioner mobile app:
+
+1. Build with the BLE provisioning overlay:
+   ```sh
+   west build -b nrf7002dk/nrf5340/cpuapp -p -- -DEXTRA_CONF_FILE=overlay-ble-prov.conf
+   west flash --erase
+   ```
+   
+   **Note:** The `-DSB_CONFIG_NETCORE_HCI_IPC=y` flag is not needed as it's already configured in `sysbuild.conf`.
+
+2. Install the **nRF Wi-Fi Provisioner** mobile app:
+   - [Android](https://play.google.com/store/apps/details?id=no.nordicsemi.android.wifi.provisioning)
+   - [iOS](https://apps.apple.com/app/nrf-wi-fi-provisioner/id1638948698)
+
+3. Provision WiFi credentials:
+   - Open the app and scan for BLE devices
+   - Connect to device named `PV<MAC>` (e.g., `PV006EB1`)
+   - Scan for available WiFi networks
+   - Select your network and enter the password
+   - Provision the credentials
+
+4. The device will automatically:
+   - Connect to the configured WiFi network
+   - Reconnect automatically after power cycle using stored credentials
+   - Update BLE advertisement with connection status (provisioned, connected, RSSI)
+
+5. **Re-provisioning to a different WiFi network:**
+   - The device supports changing to a different WiFi network without erasing flash
+   - Simply provision new credentials via the BLE app
+   - The device will disconnect from the current network and connect to the new one
+   - **Note:** After re-provisioning, you may need to wait ~10 seconds for the connection to establish
+
+## Onboarding a Device
+
+1. Upload `build/memfault-nrf7002dk/zephyr/zephyr.elf` to **Symbol Files** on the Memfault platform. The device should now appear on the **Devices** list.
+2. Review **Timeline** or **Reports** to see the Metrics updates when `BUTTON1` is pressed. Periodic uploads occur according to `CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_INTERVAL_SECS` (900s in this sample). Enable Developer Mode in the Memfault dashboard if you need more frequent uploads during development.
+
+## OTA Process
 
 1. Update `CONFIG_MEMFAULT_NCS_FW_VERSION="2.0.0"` (or your new version number) after modifying the firmware. See [Versioning Schemes](https://docs.memfault.com/docs/platform/software-version-hardware-version#version-schemes) for guidance.
 2. Build the new firmware and upload build/memfault-nrf7002dk/zephyr/zephyr.elf to **Symbol Files**, retrieve the OTA payload at `build/memfault-nrf7002dk/zephyr/zephyr.signed.bin`.
@@ -192,36 +266,3 @@ For general Memfault support:
 For nRF Connect SDK support:
 - Visit [Nordic DevZone](https://devzone.nordicsemi.com)
 
-## Updating the memfault-firmware-sdk version
-
-If you need to change which memfault firmware SDK version the NCS workspace uses, update the NCS manifest and run `west update` from the top-level NCS workspace. The memfault project entry lives in `nrf/west.yml` as `memfault-firmware-sdk` (path: `modules/lib/memfault-firmware-sdk`).
-
-Quick steps (example: set to tag v1.30.3):
-
-1. Edit the manifest file and change the `revision` for `memfault-firmware-sdk` to `1.30.3`:
-
-```yaml
-- name: memfault-firmware-sdk
-   path: modules/lib/memfault-firmware-sdk
-   revision: 1.30.3
-   remote: memfault
-```
-
-2. From the NCS workspace root (adjust path to your workspace) run:
-
-```bash
-cd /opt/nordic/ncs/v3.1.1
-west update
-```
-
-3. Verify the module now points at the requested tag:
-
-```bash
-cd /opt/nordic/ncs/v3.1.1/modules/lib/memfault-firmware-sdk
-git log   
-commit 67244e00d416f3036535398e089021589c63c86b (HEAD, tag: 1.30.3, manifest-rev)
-Author: Memfault Inc <hello@memfault.com>
-Date:   Mon Oct 27 16:09:54 2025 +0000
-
-    Memfault Firmware SDK 1.30.3 (Build 15552)
-```

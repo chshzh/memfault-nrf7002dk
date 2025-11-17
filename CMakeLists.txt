@@ -15,3 +15,9 @@ add_subdirectory(src)
 
 zephyr_include_directories(src)
 zephyr_include_directories(config)
+
+# Add BLE provisioning library when enabled
+if(CONFIG_BLE_PROV_ENABLED)
+    zephyr_library_include_directories($<TARGET_PROPERTY:wifi_prov_core,BINARY_DIR>)
+    target_link_libraries(app PRIVATE wifi_prov_ble)
+endif()
