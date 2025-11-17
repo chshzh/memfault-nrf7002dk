@@ -38,6 +38,10 @@
 #include "ble_provisioning.h"
 #endif
 
+#ifdef CONFIG_HTTPS_CLIENT_ENABLED
+#include "https_client.h"
+#endif
+
 LOG_MODULE_REGISTER(memfault_sample, CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL);
 
 /* Macros used to subscribe to specific Zephyr NET management events. */
@@ -48,6 +52,8 @@ LOG_MODULE_REGISTER(memfault_sample, CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL);
 
 static K_SEM_DEFINE(net_conn_sem, 0, 1);
 static bool wifi_connected = false;
+static void reconnect_work_handler(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(reconnect_work, reconnect_work_handler);
 
 static int64_t button_press_ts_btn1;
 static int64_t button_press_ts_btn2;
@@ -205,6 +211,11 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 		ble_prov_update_wifi_status(true);
 #endif
 
+		/* Notify HTTPS client that network is connected */
+#ifdef CONFIG_HTTPS_CLIENT_ENABLED
+		https_client_notify_connected();
+#endif
+
 		k_sem_give(&net_conn_sem);
 		mflt_ota_triggers_notify_connected();
 		break;
@@ -216,6 +227,11 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 #ifdef CONFIG_BLE_PROV_ENABLED
 		ble_prov_update_wifi_status(false);
 #endif
+
+		/* Notify HTTPS client that network is disconnected */
+#ifdef CONFIG_HTTPS_CLIENT_ENABLED
+		https_client_notify_disconnected();
+#endif
 		break;
 	default:
 		LOG_DBG("Unknown event: 0x%08X", event);
@@ -226,9 +242,38 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 static void connectivity_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 				       struct net_if *iface)
 {
-	if (event == NET_EVENT_CONN_IF_FATAL_ERROR) {
-		__ASSERT(false, "Failed to connect to a network");
+	switch (event) {
+	case NET_EVENT_CONN_IF_FATAL_ERROR:
+		LOG_ERR("Connectivity fatal error, scheduling reconnect");
+		wifi_connected = false;
+#ifdef CONFIG_BLE_PROV_ENABLED
+		ble_prov_update_wifi_status(false);
+#endif
+		k_work_reschedule(&reconnect_work, K_SECONDS(2));
+		break;
+	case NET_EVENT_CONN_IF_TIMEOUT:
+		LOG_WRN("Connectivity timeout, scheduling reconnect");
+		k_work_reschedule(&reconnect_work, K_SECONDS(1));
+		break;
+	default:
+		break;
+	}
+}
+
+static void reconnect_work_handler(struct k_work *work)
+{
+	int err;
+
+	LOG_INF("Retrying network bring-up after connectivity fault");
+	err = conn_mgr_all_if_up(true);
+	if (err) {
+		LOG_ERR("conn_mgr_all_if_up during retry failed: %d", err);
 		return;
+	}
+
+	err = conn_mgr_all_if_connect(true);
+	if (err) {
+		LOG_ERR("conn_mgr_all_if_connect during retry failed: %d", err);
 	}
 }
 
@@ -264,9 +309,23 @@ int main(void)
 	net_mgmt_init_event_callback(&conn_cb, connectivity_event_handler, CONN_LAYER_EVENT_MASK);
 	net_mgmt_add_event_callback(&conn_cb);
 
+#ifdef CONFIG_HTTPS_CLIENT_ENABLED
+	/* Initialize HTTPS client */
+	err = https_client_init();
+	if (err) {
+		LOG_ERR("HTTPS client initialization failed: %d", err);
+	}
+#endif
+
 #ifdef CONFIG_BLE_PROV_ENABLED
 	/* Sleep 1 second to allow initialization of wifi driver. */
 	k_sleep(K_SECONDS(1));
+
+	/* Bring up network interface first */
+	err = conn_mgr_all_if_up(true);
+	if (err) {
+		LOG_ERR("conn_mgr_all_if_up, error: %d", err);
+	}
 
 	/* Check if WiFi credentials are stored before attempting connection */
 	if (wifi_credentials_is_empty()) {
@@ -284,19 +343,9 @@ int main(void)
 		LOG_INF("Attempting to connect to stored WiFi network");
 
 		/* Try to connect using stored WiFi credentials */
-		struct net_if *iface = net_if_get_default();
-		err = net_mgmt(NET_REQUEST_WIFI_CONNECT_STORED, iface, NULL, 0);
+		err = conn_mgr_all_if_connect(true);
 		if (err) {
 			LOG_ERR("WiFi connection request failed: %d", err);
-		}
-
-		/* Initialize BLE provisioning after connection attempt for status updates */
-		k_sleep(K_SECONDS(2));
-		err = ble_prov_init();
-		if (err) {
-			LOG_ERR("BLE provisioning initialization failed: %d", err);
-		} else {
-			LOG_INF("BLE provisioning initialized successfully");
 		}
 	}
 #else
@@ -304,12 +353,6 @@ int main(void)
 	 * Wi-Fi or LTE depending on the board that the sample was built for.
 	 */
 	LOG_INF("Bringing network interface up and connecting to the network");
-
-	err = conn_mgr_all_if_up(true);
-	if (err) {
-		__ASSERT(false, "conn_mgr_all_if_up, error: %d", err);
-		return err;
-	}
 
 	err = conn_mgr_all_if_connect(true);
 	if (err) {

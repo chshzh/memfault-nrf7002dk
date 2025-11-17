@@ -9,6 +9,17 @@ cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(memfault-nrf7002dk)
 
+# Generate hex files from pem files for HTTPS client
+if(CONFIG_HTTPS_CLIENT_ENABLED)
+    set(gen_dir ${CMAKE_CURRENT_BINARY_DIR}/certs)
+    zephyr_include_directories(${gen_dir})
+    generate_inc_file_for_target(
+        app
+        cert/DigiCertGlobalG3.pem
+        ${gen_dir}/DigiCertGlobalG3.pem.inc
+    )
+endif()
+
 # NORDIC SDK APP START
 add_subdirectory(src)
 # NORDIC SDK APP END

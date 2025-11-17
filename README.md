@@ -14,6 +14,7 @@ Note: The default Memfault Firmware SDK that ships with NCS v3.1.1 is v1.26.0. T
 It showcases:
 - Wi-Fi connectivity using nRF7002DK
 - BLE-based WiFi provisioning (optional)
+- Periodic HTTPS client requests (optional)
 - Crash reporting and coredump collection
 - Custom Metrics collection and heartbeat reporting
 - Device OTA based on Memfault cloud
@@ -180,11 +181,9 @@ The BLE provisioning feature allows you to configure WiFi credentials wirelessly
 
 1. Build with the BLE provisioning overlay:
    ```sh
-   west build -b nrf7002dk/nrf5340/cpuapp -p -- -DEXTRA_CONF_FILE=overlay-ble-prov.conf
+   west build -b nrf7002dk/nrf5340/cpuapp -p -- -DSB_CONFIG_NETCORE_HCI_IPC=y -DEXTRA_CONF_FILE=overlay-ble-prov.conf
    west flash --erase
    ```
-   
-   **Note:** The `-DSB_CONFIG_NETCORE_HCI_IPC=y` flag is not needed as it's already configured in `sysbuild.conf`.
 
 2. Install the **nRF Wi-Fi Provisioner** mobile app:
    - [Android](https://play.google.com/store/apps/details?id=no.nordicsemi.android.wifi.provisioning)
@@ -207,6 +206,32 @@ The BLE provisioning feature allows you to configure WiFi credentials wirelessly
    - Simply provision new credentials via the BLE app
    - The device will disconnect from the current network and connect to the new one
    - **Note:** After re-provisioning, you may need to wait ~10 seconds for the connection to establish
+
+### Option 3: Building with HTTPS Client Requests
+
+The HTTPS client feature enables periodic HTTPS HEAD requests to test network connectivity and demonstrate HTTPS functionality:
+
+1. Build with the HTTPS client overlay:
+   ```sh
+   west build -b nrf7002dk/nrf5340/cpuapp -p -- -DEXTRA_CONF_FILE="overlay-https-req.conf"
+   west flash --erase
+   ```
+
+2. Configure WiFi credentials using shell commands (or combine with BLE provisioning overlay):
+   ```
+   uart:~$ wifi cred add -s YOURSSID -k 1 -p YOURPASSWORD
+   uart:~$ wifi cred auto_connect
+   ```
+
+3. The device will automatically:
+   - Send periodic HTTPS HEAD requests to `example.com` (configurable via `CONFIG_HTTPS_HOSTNAME`)
+   - Display request/response information in logs
+   - Operate on a 10-second interval (configurable via `CONFIG_HTTPS_REQUEST_INTERVAL_SEC`)
+
+4. **Customization options:**
+   - Edit `overlay-https-req.conf` to change the target hostname
+   - Adjust request interval by modifying `CONFIG_HTTPS_REQUEST_INTERVAL_SEC`
+   - Combine with ble overlays: `west build -b nrf7002dk/nrf5340/cpuapp -p -- -DSB_CONFIG_NETCORE_HCI_IPC=y -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf"`
 
 ## Onboarding a Device
 

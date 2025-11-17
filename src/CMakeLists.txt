@@ -18,4 +18,9 @@ if(CONFIG_BLE_PROV_ENABLED)
     target_sources(app PRIVATE ble_provisioning.c)
 endif()
 
+# Add HTTPS client when enabled
+if(CONFIG_HTTPS_CLIENT_ENABLED)
+    target_sources(app PRIVATE https_client.c)
+endif()
+
 target_include_directories(app PRIVATE .)
