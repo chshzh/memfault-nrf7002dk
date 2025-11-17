@@ -11,6 +11,7 @@
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/wifi.h>
 #include <zephyr/net/wifi_mgmt.h>
+#include <zephyr/net/wifi_credentials.h>
 #include <memfault/metrics/metrics.h>
 #include <memfault/ports/zephyr/http.h>
 #include <memfault/core/data_packetizer.h>
@@ -31,6 +32,10 @@
 
 #if CONFIG_MEMFAULT_NCS_STACK_METRICS
 #include "mflt_stack_metrics.h"
+#endif
+
+#ifdef CONFIG_BLE_PROV_ENABLED
+#include "ble_provisioning.h"
 #endif
 
 LOG_MODULE_REGISTER(memfault_sample, CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL);
@@ -75,8 +80,6 @@ void memfault_metrics_heartbeat_collect_data(void)
  * Only button 1 is available on Thingy:91, the rest are available on nRF9160 DK.
  *	Button 1: Trigger stack overflow.
  *	Button 2: Trigger NULL-pointer dereference.
- *	Switch 1: Increment switch_1_toggle_count metric by one.
- *	Switch 2: Trace switch_2_toggled event, along with switch state.
  */
 static void button_handler(uint32_t button_states, uint32_t has_changed)
 {
@@ -197,12 +200,22 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 		LOG_INF("Stack metrics monitoring initialized");
 #endif
 
+		/* Update BLE advertisement with WiFi connected status */
+#ifdef CONFIG_BLE_PROV_ENABLED
+		ble_prov_update_wifi_status(true);
+#endif
+
 		k_sem_give(&net_conn_sem);
 		mflt_ota_triggers_notify_connected();
 		break;
 	case NET_EVENT_L4_DISCONNECTED:
 		LOG_INF("Network connectivity lost");
 		wifi_connected = false;
+
+		/* Update BLE advertisement with WiFi disconnected status */
+#ifdef CONFIG_BLE_PROV_ENABLED
+		ble_prov_update_wifi_status(false);
+#endif
 		break;
 	default:
 		LOG_DBG("Unknown event: 0x%08X", event);
@@ -242,6 +255,7 @@ int main(void)
 	if (err) {
 		LOG_ERR("dk_buttons_init, error: %d", err);
 	}
+
 	/* Setup handler for Zephyr NET Connection Manager events. */
 	net_mgmt_init_event_callback(&l4_cb, l4_event_handler, L4_EVENT_MASK);
 	net_mgmt_add_event_callback(&l4_cb);
@@ -250,6 +264,42 @@ int main(void)
 	net_mgmt_init_event_callback(&conn_cb, connectivity_event_handler, CONN_LAYER_EVENT_MASK);
 	net_mgmt_add_event_callback(&conn_cb);
 
+#ifdef CONFIG_BLE_PROV_ENABLED
+	/* Sleep 1 second to allow initialization of wifi driver. */
+	k_sleep(K_SECONDS(1));
+
+	/* Check if WiFi credentials are stored before attempting connection */
+	if (wifi_credentials_is_empty()) {
+		LOG_INF("No stored WiFi credentials found");
+		LOG_INF("Please provision WiFi credentials using BLE");
+
+		/* Initialize BLE provisioning */
+		err = ble_prov_init();
+		if (err) {
+			LOG_ERR("BLE provisioning initialization failed: %d", err);
+		} else {
+			LOG_INF("BLE provisioning initialized successfully");
+		}
+	} else {
+		LOG_INF("Attempting to connect to stored WiFi network");
+
+		/* Try to connect using stored WiFi credentials */
+		struct net_if *iface = net_if_get_default();
+		err = net_mgmt(NET_REQUEST_WIFI_CONNECT_STORED, iface, NULL, 0);
+		if (err) {
+			LOG_ERR("WiFi connection request failed: %d", err);
+		}
+
+		/* Initialize BLE provisioning after connection attempt for status updates */
+		k_sleep(K_SECONDS(2));
+		err = ble_prov_init();
+		if (err) {
+			LOG_ERR("BLE provisioning initialization failed: %d", err);
+		} else {
+			LOG_INF("BLE provisioning initialized successfully");
+		}
+	}
+#else
 	/* Connecting to the configured connectivity layer.
 	 * Wi-Fi or LTE depending on the board that the sample was built for.
 	 */
@@ -266,6 +316,7 @@ int main(void)
 		__ASSERT(false, "conn_mgr_all_if_connect, error: %d", err);
 		return err;
 	}
+#endif
 
 	/* Performing in an infinite loop to be resilient against
 	 * re-connect bursts directly after boot, e.g. when connected
