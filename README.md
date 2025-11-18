@@ -1,64 +1,164 @@
 # Memfault nRF7002DK Sample
 
-A Memfault integration sample for Nordic nRF7002DK, adapted from the original Nordic Semiconductor Memfault sample. This project demonstrates how to integrate Memfault's crash reporting and monitoring capabilities with Wi-Fi connectivity on the nRF7002DK platform.
+A comprehensive Memfault integration sample for Nordic nRF7002DK, demonstrating production-ready IoT device management with Wi-Fi connectivity, BLE provisioning, HTTPS communication, and cloud-based monitoring.
 
 ## Overview
 
 This sample application is built with:
-- nRF Connect SDK v3.1.1
-- Memfault Firmware SDK v1.30.3 
+- **nRF Connect SDK v3.1.1**
+- **Memfault Firmware SDK v1.30.3**
+- **Board**: nRF7002DK (nRF5340 + nRF7002 WiFi companion chip)
 
-Note: The default Memfault Firmware SDK that ships with NCS v3.1.1 is v1.26.0. This project has been updated to use v1.30.3 for improved features and bug fixes. See the "Updating the memfault-firmware-sdk version" section below for instructions on changing SDK versions.
+> **Note:** The default Memfault Firmware SDK that ships with NCS v3.1.1 is v1.26.0. This project has been updated to use v1.30.3 for improved features and bug fixes. See the "Updating the memfault-firmware-sdk version" section below for upgrade instructions.
 
+## Features
 
-It showcases:
-- Wi-Fi connectivity using nRF7002DK
-- BLE-based WiFi provisioning (optional)
-- Periodic HTTPS client requests (optional)
-- Crash reporting and coredump collection
-- Custom Metrics collection and heartbeat reporting
-- Device OTA based on Memfault cloud
+### Core Capabilities
+- ✅ **Wi-Fi Connectivity** - WPA2/WPA3 support with automatic reconnection
+- ✅ **BLE Provisioning** - Configure WiFi credentials wirelessly via mobile app
+- ✅ **HTTPS Client** - Periodic connectivity testing with TLS 1.2/1.3
+- ✅ **Crash Reporting** - Automatic coredump collection and upload
+- ✅ **Metrics Collection** - WiFi signal strength, stack usage, heap statistics
+- ✅ **OTA Updates** - Secure firmware updates via Memfault cloud
+- ✅ **MCUBoot Bootloader** - Dual-bank firmware updates with rollback protection
+
+### Custom Implementations
+- **WiFi Metrics** (`mflt_wifi_metrics.c`) - RSSI, connection quality tracking
+- **Stack Metrics** (`mflt_stack_metrics.c`) - Per-thread stack usage monitoring
+- **OTA Triggers** (`mflt_ota_triggers.c`) - Automatic OTA checks on network events
+- **HTTPS Client** (`https_client.c`) - Periodic HEAD requests with certificate validation
+- **BLE Provisioning** (`ble_provisioning.c`) - Nordic WiFi Provisioning Service integration
 
 ## Hardware Requirements
 
-- nRF7002DK
-- Wi-Fi network access for data upload
+- **nRF7002DK** development kit
+- **USB cable** for power and debugging
+- **WiFi Access Point** (2.4 GHz, WPA2/WPA3)
+- **Memfault Account** ([sign up free](https://memfault.com))
 
-## Updating the memfault-firmware-sdk version
+## Quick Start
 
-If you need to change which Memfault Firmware SDK version the NCS workspace uses, update the NCS manifest and run `west update` from the top-level NCS workspace. The Memfault project entry lives in `nrf/west.yml` as `memfault-firmware-sdk` (path: `modules/lib/memfault-firmware-sdk`).
+1. **Clone the repository** (or copy to your NCS workspace)
+2. **Set your Memfault project key** in `prj.conf`:
+   ```properties
+   CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key_here"
+   ```
+3. **Build and flash** (recommended: Option 4 with all features):
+   ```bash
+   west build -b nrf7002dk/nrf5340/cpuapp -p -- -DSB_CONFIG_NETCORE_HCI_IPC=y -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf"
+   west flash --erase
+   ```
+4. **Provision WiFi** using the nRF Wi-Fi Provisioner mobile app
+5. **Monitor device** on Memfault dashboard
 
-Quick steps (example: set to tag v1.30.3):
+## Project Structure
 
-1. Edit the manifest file and change the `revision` for `memfault-firmware-sdk` to `1.30.3`:
-
-```yaml
-- name: memfault-firmware-sdk
-   path: modules/lib/memfault-firmware-sdk
-   revision: 1.30.3
-   remote: memfault
+```
+memfault-nrf7002dk/
+├── src/
+│   ├── main.c                    # Application entry point
+│   ├── https_client.c/h          # HTTPS client implementation
+│   ├── ble_provisioning.c/h      # BLE WiFi provisioning
+│   ├── mflt_ota_triggers.c/h     # OTA automation logic
+│   ├── mflt_wifi_metrics.c/h     # WiFi metrics collection
+│   └── mflt_stack_metrics.c/h    # Stack usage tracking
+├── boards/                        # Board-specific configs
+├── cert/                          # TLS certificates
+│   └── DigiCertGlobalG3.pem      # Root CA for HTTPS
+├── config/                        # Memfault config templates
+├── sysbuild/                      # Multi-image build configs
+├── prj.conf                       # Main project configuration
+├── overlay-ble-prov.conf         # BLE provisioning overlay
+├── overlay-https-req.conf        # HTTPS client overlay
+├── pm_static_*.yml               # Flash partition layout
+└── README.md                      # This file
 ```
 
-2. From the NCS workspace root (adjust path to your workspace) run:
+## Advanced Topics
 
-```bash
-cd /opt/nordic/ncs/v3.1.1
-west update
-```
+### Updating Memfault Firmware SDK Version
 
-3. Verify the module now points at the requested tag:
+The project uses Memfault SDK v1.30.3 (newer than NCS v3.1.1 default v1.26.0).
 
-```bash
-cd /opt/nordic/ncs/v3.1.1/modules/lib/memfault-firmware-sdk
-git log   
-commit 67244e00d416f3036535398e089021589c63c86b (HEAD, tag: 1.30.3, manifest-rev)
-Author: Memfault Inc <hello@memfault.com>
-Date:   Mon Oct 27 16:09:54 2025 +0000
+To change SDK version:
 
-    Memfault Firmware SDK 1.30.3 (Build 15552)
-```
+1. **Edit NCS manifest** at `<ncs_root>/nrf/west.yml`:
+   ```yaml
+   - name: memfault-firmware-sdk
+     path: modules/lib/memfault-firmware-sdk
+     revision: 1.30.3  # Change this
+     remote: memfault
+   ```
 
-## Memory Layout
+2. **Update modules:**
+   ```bash
+   cd /opt/nordic/ncs/v3.1.1
+   west update
+   ```
+
+3. **Verify update:**
+   ```bash
+   cd modules/lib/memfault-firmware-sdk
+   git log --oneline -1
+   # Should show: 67244e0 Memfault Firmware SDK 1.30.3 (Build 15552)
+   ```
+
+### Custom Partition Layout
+
+The project uses static partition configuration in `pm_static_nrf7002dk_nrf5340_cpuapp.yml`.
+
+Key partitions:
+- **mcuboot**: 32 KB bootloader
+- **app**: 919 KB application (internal flash)
+- **settings_storage**: 8 KB WiFi credentials (internal flash)
+- **memfault_storage**: 64 KB coredump storage (internal flash)
+- **mcuboot_secondary**: 919 KB OTA slot (external flash)
+
+To modify:
+1. Edit `pm_static_nrf7002dk_nrf5340_cpuapp.yml`
+2. Ensure `app` and `mcuboot_secondary` sizes match
+3. Keep `settings_storage` for WiFi credential persistence
+4. Rebuild with `-p` to regenerate partitions
+
+### Adding Custom Metrics
+
+Example: Track custom application metrics:
+
+1. **Define metric** in your code:
+   ```c
+   #include "memfault/metrics/metrics.h"
+   
+   void record_custom_metric(void) {
+       MEMFAULT_METRIC_SET_UNSIGNED(custom_counter, value);
+   }
+   ```
+
+2. **Add to heartbeat definition:**
+   - Edit generated `config/memfault_metrics_heartbeat_config.def`
+   - Or use runtime API
+
+See [Memfault Metrics Documentation](https://docs.memfault.com/docs/mcu/metrics-api)
+
+### Non-Volatile Metrics Storage
+
+Currently, metrics use RAM-only storage. To implement persistent metrics:
+
+1. Enable in configuration
+2. Implement `memfault_platform_metrics_storage_*` APIs
+3. Use `memfault_storage` partition or external flash
+
+See `components/include/memfault/core/platform/nonvolatile_event_storage.h`
+
+## Contributing
+
+Contributions are welcome! Areas for improvement:
+- [ ] 5 GHz WiFi support (when hardware available)
+- [ ] Low-power mode optimization
+- [ ] Additional metric types
+- [ ] More comprehensive tests
+- [ ] Documentation improvements
+
+## License
 
 This project uses a custom partition layout optimized for Memfault operation and Wi-Fi connectivity on the nRF7002DK.
 
@@ -152,7 +252,23 @@ Note about Memfault storage usage
 
 ## Building Firmware
 
-### Option 1: Building with Wi-Fi Shell Provisioning
+### Prerequisites
+
+Before building, ensure you have:
+1. **NCS v3.1.1 toolchain** properly installed
+2. **Memfault project key** from your Memfault dashboard
+3. **Updated** `CONFIG_MEMFAULT_NCS_PROJECT_KEY` in `prj.conf`
+
+### Build Options Comparison
+
+| Option | WiFi Provisioning | HTTPS Client | BLE Required | Use Case |
+|--------|------------------|--------------|--------------|----------|
+| **Option 1** | Shell commands | ❌ | No | Development/Testing |
+| **Option 2** | BLE mobile app | ❌ | Yes | Production WiFi setup |
+| **Option 3** | Shell commands | ✅ | No | Connectivity testing |
+| **Option 4** ⭐ | BLE mobile app | ✅ | Yes | **Production (Recommended)** |
+
+### Option 1: Basic Build (Shell Provisioning Only)
 
 Follow these steps for the standard build that uses shell commands to configure WiFi:
 
@@ -231,63 +347,206 @@ The HTTPS client feature enables periodic HTTPS HEAD requests to test network co
 4. **Customization options:**
    - Edit `overlay-https-req.conf` to change the target hostname
    - Adjust request interval by modifying `CONFIG_HTTPS_REQUEST_INTERVAL_SEC`
-   - Combine with ble overlays: `west build -b nrf7002dk/nrf5340/cpuapp -p -- -DSB_CONFIG_NETCORE_HCI_IPC=y -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf"`
+   - Combine with ble overlays: `-DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf"`
 
-## Onboarding a Device
+### Option 4: (BLE + HTTPS - Recommended)
 
-1. Upload `build/memfault-nrf7002dk/zephyr/zephyr.elf` to **Symbol Files** on the Memfault platform. The device should now appear on the **Devices** list.
-2. Review **Timeline** or **Reports** to see the Metrics updates when `BUTTON1` is pressed. Periodic uploads occur according to `CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_INTERVAL_SECS` (900s in this sample). Enable Developer Mode in the Memfault dashboard if you need more frequent uploads during development.
+**Best for production deployments** - combines wireless provisioning with connectivity monitoring:
 
-## OTA Process
+1. **Build with both overlays:**
+   ```bash
+   west build -b nrf7002dk/nrf5340/cpuapp -p -- \
+     -DSB_CONFIG_NETCORE_HCI_IPC=y \
+     -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf"
+   west flash --erase
+   ```
 
-1. Update `CONFIG_MEMFAULT_NCS_FW_VERSION="2.0.0"` (or your new version number) after modifying the firmware. See [Versioning Schemes](https://docs.memfault.com/docs/platform/software-version-hardware-version#version-schemes) for guidance.
-2. Build the new firmware and upload build/memfault-nrf7002dk/zephyr/zephyr.elf to **Symbol Files**, retrieve the OTA payload at `build/memfault-nrf7002dk/zephyr/zephyr.signed.bin`.
-3. In the Memfault platform, open the **OTA releases** page. Create a **Full Release** (e.g., version 2.0.0), add the OTA payload to the release, and activate it for the target cohort.
-4. Run `mflt_nrf fota` in the device shell to start downloading the new firmware. After the download completes, the device may take several minutes to apply the update and reboot. Check and confirm the new firmware version from device output:
+2. **Provision WiFi** via the nRF Wi-Fi Provisioner mobile app:
+   - [Android](https://play.google.com/store/apps/details?id=no.nordicsemi.android.wifi.provisioning) | [iOS](https://apps.apple.com/app/nrf-wi-fi-provisioner/id1638948698)
+   - Scan and connect to device `PV<MAC>` (e.g., `PV006EB1`)
+   - Select WiFi network and enter password
+   - Device connects automatically
+
+3. **Features enabled:**
+   - ✅ Wireless WiFi provisioning (no USB/shell needed)
+   - ✅ Periodic HTTPS requests to `example.com` (every 60 seconds)
+   - ✅ Automatic reconnection after power cycles
+   - ✅ Re-provisioning support for network changes
+   - ✅ Connection status in BLE advertisements
+
+4. **Expected behavior:**
+   ```
+   [00:00:05.123] <inf> ble_prov: BLE advertising started as 'PV006EB1'
+   [00:00:15.456] <inf> ble_prov: WiFi provisioned: SSID=MyNetwork
+   [00:00:18.789] <inf> wpa_supp: Connected to MyNetwork
+   [00:00:19.012] <inf> https_client: Sending HTTPS request to example.com
+   [00:00:19.234] <inf> https_client: HTTP/1.1 200 OK
+   ```
+
+### Configuration Options
+
+#### HTTPS Client Customization
+
+Edit `overlay-https-req.conf` to customize HTTPS behavior:
+
+```properties
+# Change target hostname
+CONFIG_HTTPS_HOSTNAME="api.myserver.com"
+
+# Adjust request interval (seconds)
+CONFIG_HTTPS_REQUEST_INTERVAL_SEC=300  # 5 minutes
+
+# Increase stack size if needed
+CONFIG_HTTPS_CLIENT_STACK_SIZE=8192
 ```
-[00:00:00.261,535] <inf> memfault_sample: Memfault sample has started! Version: 2.0.0
-```
 
-### Button Behavior
+## Memfault Integration
 
-The on-board buttons reuse the Nordic Memfault sample semantics while adding a long-press option for common Memfault workflows:
+### Onboarding a New Device
 
-- **Button 1 (``DK_BTN1``)**
-   - *Short press (< 3 s)*: Manually triggers a Memfault heartbeat collection. If the device is offline, the request is skipped with a warning.
-   - *Long press (≥ 3 s)*: Purposefully overflows the stack (`fib(10000)`) so you can capture a coredump and verify the Memfault crash pipeline end-to-end.
-- **Button 2 (``DK_BTN2``)**
-   - *Short press (< 3 s)*: Kicks off the same OTA flow as the `mflt_nrf fota` shell command by nudging the OTA worker thread.
-   - *Long press (≥ 3 s)*: Triggers a divide-by-zero fault to generate a second style of crash artifact for testing.
+1. **Upload symbol file** after building:
+   ```bash
+   # Symbol file location
+   build/memfault-nrf7002dk/zephyr/zephyr.elf
+   ```
+   - Navigate to **Fleet** → **Symbol Files** in Memfault dashboard
+   - Upload `zephyr.elf`
+   - Device will appear in **Devices** list after first connection
+
+2. **Monitor device activity:**
+   - **Timeline** - Real-time event stream
+   - **Metrics** - Heartbeat data (every 15 minutes)
+   - **Issues** - Crashes and errors
+   - **Traces** - Debug logs (if enabled)
+
+3. **Enable Developer Mode** for faster uploads during development:
+   - Default: 900 seconds (15 minutes)
+   - Dev Mode: ~60 seconds
+   - Configure via `CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_INTERVAL_SECS`
+
+### Performing OTA Updates
+
+Complete workflow for pushing firmware updates:
+
+1. **Update firmware version** in `prj.conf`:
+   ```properties
+   CONFIG_MEMFAULT_NCS_FW_VERSION="4.1.0"  # Increment version
+   ```
+   See [Memfault Versioning Schemes](https://docs.memfault.com/docs/platform/software-version-hardware-version#version-schemes)
+
+2. **Build new firmware:**
+   ```bash
+   west build -b nrf7002dk/nrf5340/cpuapp -p -- \
+     -DSB_CONFIG_NETCORE_HCI_IPC=y \
+     -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf"
+   ```
+
+3. **Upload artifacts to Memfault:**
+   - **Symbol file**: `build/memfault-nrf7002dk/zephyr/zephyr.elf`
+   - **OTA payload**: `build/memfault-nrf7002dk/zephyr/zephyr.signed.bin`
+
+4. **Create release in Memfault:**
+   - Navigate to **Fleet** → **OTA Releases**
+   - Click **Create Release**
+   - Set version (e.g., `4.1.0`)
+   - Add `zephyr.signed.bin` as artifact
+   - Activate release for target cohort (e.g., `default`)
+
+5. **Trigger update on device:**
+   - **Automatic**: Device checks on network connection + every 60 min
+   - **Manual**: Press Button 2 (short press) or run `mflt_nrf fota` in shell
+
+6. **Monitor update progress:**
+   ```
+   [00:05:12.345] <inf> mflt_ota: Checking for updates...
+   [00:05:13.678] <inf> mflt_ota: Update available: 4.1.0
+   [00:05:14.012] <inf> fota_download: Downloading...
+   [00:07:45.234] <inf> fota_download: Download complete
+   [00:07:46.567] <inf> mcuboot: Image confirmed
+   [00:07:47.890] <inf> sys: Rebooting...
+   [00:00:00.261] <inf> memfault_sample: Memfault sample has started! Version: 4.1.0
+   ```
+
+### Collected Metrics
+
+The sample automatically tracks:
+
+| Metric | Type | Description | Collection Interval |
+|--------|------|-------------|---------------------|
+| `wifi_rssi` | Gauge | WiFi signal strength (dBm) | Every heartbeat (15 min) |
+| `wifi_connected` | Counter | Connection state changes | On change |
+| `heap_free` | Gauge | Free heap memory (bytes) | Every heartbeat |
+| `stack_free_*` | Gauge | Per-thread stack usage | Every heartbeat |
+| `http_requests` | Counter | HTTPS request count | On request |
+| `ota_checks` | Counter | OTA check attempts | On check |
+
+View metrics in **Fleet** → **Metrics** → Select device
+
+## Device Operation
+
+### Button Functions
+
+Interactive testing and crash generation:
+
+| Button | Press Type | Action | Purpose |
+|--------|-----------|---------|---------|
+| **Button 1** | Short (< 3s) | Trigger Memfault heartbeat | Manual metrics upload |
+| **Button 1** | Long (≥ 3s) | Stack overflow crash | Test crash reporting |
+| **Button 2** | Short (< 3s) | Check for OTA update | Manual OTA trigger |
+| **Button 2** | Long (≥ 3s) | Division by zero crash | Test fault handler |
 
 ### Automatic OTA Triggers
 
-The sample also provides automated OTA checks so you don't need to issue the shell command manually every time:
+The firmware automatically checks for updates in these scenarios:
 
-- **Button 2 (``DK_BTN2``)**: pressing the button (short press) notifies the firmware to run the same flow as `mflt_nrf fota`. A semaphore wakes the OTA thread immediately and the download starts if an update is available.
-- **Network connectivity**: each time L4 connectivity is established the OTA thread is nudged so newly connected devices immediately check for pending updates.
-- **Periodic background check**: the `mflt_ota_triggers` thread wakes every `OTA_CHECK_INTERVAL` (defaults to `K_MINUTES(60)` in `mflt_ota_triggers.c`) to poll Memfault for a new release. You can override this interval at build time by defining `OTA_CHECK_INTERVAL` (for example, via a compiler flag or by editing the source).
+1. **Network Connected** - OTA check immediately after WiFi connection
+2. **Button Press** - Button 2 short press triggers manual check
+3. **Periodic Check** - Every 60 minutes (configurable in `mflt_ota_triggers.c`)
 
-All triggers use the shared Memfault FOTA client, so ensure your project is built with `CONFIG_MEMFAULT_FOTA=y`. If an OTA is already in flight, additional requests (button, connectivity, or periodic) are coalesced until the current attempt finishes.
+> **Note:** All triggers use the shared Memfault FOTA client. Concurrent requests are coalesced.
 
-## License
+
+4. **Re-provision via BLE** if using BLE provisioning overlay
+
+
 
 This project is based on Nordic Semiconductor's Memfault sample and follows the same licensing terms (LicenseRef-Nordic-5-Clause).
 
 ## Resources
 
-- [Memfault Documentation](https://docs.memfault.com)
-- [Memfault Non-Volatile Event Storage (metrics)](https://docs.memfault.com/docs/mcu/metrics-api#non-volatile-event-storage)
-- [nRF Connect SDK Documentation](https://docs.nordicsemi.com/category/software-nrf-connect-sdk)
-- [nRF7002DK User Guide](https://docs.nordicsemi.com/category/hardware-development-kits)
+### Documentation
+- [Memfault Documentation](https://docs.memfault.com) - Complete platform guide
+- [Memfault Metrics API](https://docs.memfault.com/docs/mcu/metrics-api) - Custom metrics
+- [Memfault OTA Updates](https://docs.memfault.com/docs/mcu/releases-integration-guide) - OTA guide
+- [nRF Connect SDK](https://docs.nordicsemi.com/category/software-nrf-connect-sdk) - NCS documentation
+- [nRF7002DK User Guide](https://docs.nordicsemi.com/category/hardware-development-kits) - Hardware guide
+
+### Related Projects
+- [Nordic Memfault Sample](https://github.com/nrfconnect/sdk-nrf/tree/main/samples/debug/memfault) - Original base
+- [Memfault Firmware SDK](https://github.com/memfault/memfault-firmware-sdk) - SDK repository
+
+### Tools
+- [nRF Wi-Fi Provisioner App](https://www.nordicsemi.com/Products/Development-tools/nRF-Wi-Fi-Provisioner) - Mobile provisioning
+- [nRF Connect for Desktop](https://www.nordicsemi.com/Products/Development-tools/nrf-connect-for-desktop) - Development tools
+- [Memfault CLI](https://docs.memfault.com/docs/ci/install-memfault-cli) - Command-line tools
 
 ## Support
 
-For issues specific to this adaptation:
-- Create an issue in this repository
+### For This Project
+- **Issues**: [GitHub Issues](https://github.com/chshzh/memfault-nrf7002dk/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/chshzh/memfault-nrf7002dk/discussions)
 
-For general Memfault support:
-- Visit [Memfault Support](https://docs.memfault.com)
+### For Memfault Platform
+- **Documentation**: [Memfault Docs](https://docs.memfault.com)
+- **Support**: [Memfault Support](https://memfault.com/support)
+- **Community**: [Memfault Community Slack](https://memfault.com/slack)
 
-For nRF Connect SDK support:
-- Visit [Nordic DevZone](https://devzone.nordicsemi.com)
+### For nRF Connect SDK
+- **DevZone**: [Nordic DevZone](https://devzone.nordicsemi.com)
+- **Documentation**: [NCS Docs](https://docs.nordicsemi.com)
+
+## Acknowledgments
+
+This project is based on Nordic Semiconductor's Memfault sample and incorporates enhancements for production IoT deployments.
+
 
