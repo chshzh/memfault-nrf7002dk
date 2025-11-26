@@ -21,6 +21,7 @@ This sample application is built with:
 - ✅ **Metrics Collection** - WiFi signal strength, stack usage, heap statistics
 - ✅ **OTA Updates** - Secure firmware updates via Memfault cloud
 - ✅ **MCUBoot Bootloader** - Dual-bank firmware updates with rollback protection
+- ✅ **nRF70 FW Stats CDR** - WiFi firmware diagnostics via Custom Data Recording
 
 ### Custom Implementations
 - **WiFi Metrics** (`mflt_wifi_metrics.c`) - RSSI, connection quality tracking
@@ -28,6 +29,7 @@ This sample application is built with:
 - **OTA Triggers** (`mflt_ota_triggers.c`) - Automatic OTA checks on network events
 - **HTTPS Client** (`https_client.c`) - Periodic HEAD requests with certificate validation
 - **BLE Provisioning** (`ble_provisioning.c`) - Nordic WiFi Provisioning Service integration
+- **nRF70 FW Stats CDR** (`mflt_nrf70_fw_stats_cdr.c`) - WiFi firmware statistics collection for cloud diagnostics
 
 ## Hardware Requirements
 
@@ -56,22 +58,24 @@ This sample application is built with:
 ```
 memfault-nrf7002dk/
 ├── src/
-│   ├── main.c                    # Application entry point
-│   ├── https_client.c/h          # HTTPS client implementation
-│   ├── ble_provisioning.c/h      # BLE WiFi provisioning
-│   ├── mflt_ota_triggers.c/h     # OTA automation logic
-│   ├── mflt_wifi_metrics.c/h     # WiFi metrics collection
-│   └── mflt_stack_metrics.c/h    # Stack usage tracking
-├── boards/                        # Board-specific configs
-├── cert/                          # TLS certificates
-│   └── DigiCertGlobalG3.pem      # Root CA for HTTPS
-├── config/                        # Memfault config templates
-├── sysbuild/                      # Multi-image build configs
-├── prj.conf                       # Main project configuration
-├── overlay-ble-prov.conf         # BLE provisioning overlay
-├── overlay-https-req.conf        # HTTPS client overlay
-├── pm_static_*.yml               # Flash partition layout
-└── README.md                      # This file
+│   ├── main.c                       # Application entry point
+│   ├── https_client.c/h             # HTTPS client implementation
+│   ├── ble_provisioning.c/h         # BLE WiFi provisioning
+│   ├── mflt_ota_triggers.c/h        # OTA automation logic
+│   ├── mflt_wifi_metrics.c/h        # WiFi metrics collection
+│   ├── mflt_stack_metrics.c/h       # Stack usage tracking
+│   └── mflt_nrf70_fw_stats_cdr.c/h  # nRF70 FW stats CDR collection
+├── boards/                           # Board-specific configs
+├── cert/                             # TLS certificates
+│   └── DigiCertGlobalG3.pem         # Root CA for HTTPS
+├── config/                           # Memfault config templates
+├── sysbuild/                         # Multi-image build configs
+├── prj.conf                          # Main project configuration
+├── overlay-ble-prov.conf            # BLE provisioning overlay
+├── overlay-https-req.conf           # HTTPS client overlay
+├── overlay-nrf70-fw-stats-cdr.conf  # nRF70 FW stats CDR overlay
+├── pm_static_*.yml                  # Flash partition layout
+└── README.md                         # This file
 ```
 
 ## Advanced Topics
@@ -148,6 +152,155 @@ Currently, metrics use RAM-only storage. To implement persistent metrics:
 3. Use `memfault_storage` partition or external flash
 
 See `components/include/memfault/core/platform/nonvolatile_event_storage.h`
+
+### nRF70 Firmware Statistics CDR (Custom Data Recording)
+
+This feature enables collection and upload of nRF70 WiFi firmware statistics (PHY, LMAC, UMAC) to Memfault cloud using the [Custom Data Recording (CDR)](https://docs.memfault.com/docs/mcu/custom-data-recording) feature. This is valuable for diagnosing WiFi connectivity issues in production deployments.
+
+#### Prerequisites
+
+This feature requires a modified Zephyr with vendor statistics support. You need to use the `mf_stats_311` branch from the Nordic fork:
+
+1. **Modify** `/opt/nordic/ncs/v3.1.1/nrf/west.yml`:
+   ```yaml
+   remotes:
+     # Add this remote
+     - name: krish2718
+       url-base: https://github.com/krish2718
+   
+   projects:
+     - name: zephyr
+       repo-path: sdk-zephyr
+       remote: krish2718           # Change from ncsinternal
+       revision: mf_stats_311      # Use the stats branch
+   ```
+
+2. **Update Zephyr:**
+   ```bash
+   cd /opt/nordic/ncs/v3.1.1/zephyr
+   git fetch krish2718 mf_stats_311
+   git reset --hard krish2718/mf_stats_311
+   ```
+
+#### Building with CDR Support
+
+```bash
+west build -b nrf7002dk/nrf5340/cpuapp -p -- \
+  -DSB_CONFIG_NETCORE_HCI_IPC=y \
+  -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-nrf70-fw-stats-cdr.conf"
+west flash --erase
+```
+
+#### Usage
+
+**Manual Collection (Button 1 short press):**
+- Press Button 1 to collect nRF70 FW stats and upload to Memfault
+- The hex blob is printed to console for verification
+- Data uploads during the next `memfault_zephyr_port_post_data()` call
+
+**Programmatic Collection:**
+```c
+#include "mflt_nrf70_fw_stats_cdr.h"
+
+// Collect stats on WiFi events
+void on_wifi_event(enum wifi_event event) {
+    if (event == WIFI_EVENT_DISCONNECTED || 
+        event == WIFI_EVENT_CONNECTION_FAILED) {
+        
+        int err = mflt_nrf70_fw_stats_cdr_collect();
+        if (err == 0) {
+            memfault_zephyr_port_post_data();
+        }
+    }
+}
+```
+
+#### Recommended Collection Events
+
+For production deployments, collect nRF70 FW stats on these application-level events:
+
+| Event | Description | When to Collect |
+|-------|-------------|-----------------|
+| **WiFi Connection Lost** | Unexpected disconnection | Before reconnection attempt |
+| **DHCP Failure** | Failed to obtain IP address | After DHCP timeout |
+| **DNS Failure** | Unable to resolve hostname | After DNS timeout |
+| **Low RSSI** | Signal strength below threshold | When RSSI < -80 dBm |
+| **Scan/Connect Failure** | Unable to find or connect to AP | After max retries |
+| **Cloud Unreachable** | Cannot reach backend server | After connection timeout |
+| **Driver Recovery** | WiFi driver initiated recovery | On recovery event |
+
+**Best Practice:** Collect stats **5 consecutive times** for each event to capture temporal patterns:
+
+```c
+#define CDR_COLLECTION_COUNT 5
+#define CDR_COLLECTION_INTERVAL_MS 1000
+
+void collect_stats_for_event(const char *event_reason) {
+    LOG_INF("Collecting nRF70 stats for event: %s", event_reason);
+    
+    for (int i = 0; i < CDR_COLLECTION_COUNT; i++) {
+        int err = mflt_nrf70_fw_stats_cdr_collect();
+        if (err) {
+            LOG_WRN("Collection %d failed: %d", i + 1, err);
+        }
+        
+        // Upload immediately (CDR has 1/24h limit per device)
+        memfault_zephyr_port_post_data();
+        
+        k_sleep(K_MSEC(CDR_COLLECTION_INTERVAL_MS));
+    }
+}
+```
+
+#### Parsing the Statistics Blob
+
+The uploaded CDR blob contains raw nRF70 firmware statistics (PHY, LMAC, UMAC counters). Parse using the provided Python script:
+
+```bash
+# Script location after using mf_stats_311 branch
+/opt/nordic/ncs/v3.1.1/modules/lib/nrf_wifi/scripts/nrf70_fw_stats_parser.py
+
+# Parse a downloaded CDR blob
+python3 nrf70_fw_stats_parser.py \
+  --header /opt/nordic/ncs/v3.1.1/modules/lib/nrf_wifi/fw_if/umac_if/inc/fw/host_rpu_sys_if.h \
+  --blob <downloaded_cdr_file.bin>
+```
+
+**Cloud-side parsing:** The Python script (or equivalent) can be integrated into Memfault cloud workflows for automatic parsing and analytics.
+
+#### CDR Limitations
+
+> ⚠️ **Important:** Memfault CDR is limited to **1 upload per device per 24 hours** by default.
+
+- Enable **Developer Mode** in Memfault dashboard for higher limits during development
+- Plan collection strategy carefully for production deployments
+- Consider aggregating multiple events before upload
+- Use event annotation (collection_reason) to correlate stats with specific issues
+
+#### Data Flow
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   WiFi Event    │────▶│  CDR Collector  │────▶│    Memfault     │
+│  (App-level)    │     │  (Binary Blob)  │     │     Cloud       │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                        │
+                                                        ▼
+                                               ┌─────────────────┐
+                                               │  Python Parser  │
+                                               │  (Analytics)    │
+                                               └─────────────────┘
+```
+
+#### Known Issues
+
+When `CONFIG_NET_STATISTICS_ETHERNET_VENDOR=y` is enabled, you may see `<err>` logs during heavy network traffic:
+
+```
+<err> wifi_nrf: nrf_wifi_sys_fmac_stats_get: Stats request already pending
+```
+
+**These errors are harmless** - they occur because the network stack queries stats on every packet, and concurrent requests are rejected. The CDR button press collection works correctly as an isolated request.
 
 ## Contributing
 
@@ -261,12 +414,13 @@ Before building, ensure you have:
 
 ### Build Options Comparison
 
-| Option | WiFi Provisioning | HTTPS Client | BLE Required | Use Case |
-|--------|------------------|--------------|--------------|----------|
-| **Option 1** | Shell commands | ❌ | No | Development/Testing |
-| **Option 2** | BLE mobile app | ❌ | Yes | Production WiFi setup |
-| **Option 3** | Shell commands | ✅ | No | Connectivity testing |
-| **Option 4** ⭐ | BLE mobile app | ✅ | Yes | **Production (Recommended)** |
+| Option | WiFi Provisioning | HTTPS Client | nRF70 CDR | BLE Required | Use Case |
+|--------|------------------|--------------|-----------|--------------|----------|
+| **Option 1** | Shell commands | ❌ | ❌ | No | Development/Testing |
+| **Option 2** | BLE mobile app | ❌ | ❌ | Yes | Production WiFi setup |
+| **Option 3** | Shell commands | ✅ | ❌ | No | Connectivity testing |
+| **Option 4** ⭐ | BLE mobile app | ✅ | ❌ | Yes | **Production (Recommended)** |
+| **Option 5** | BLE mobile app | ✅ | ✅ | Yes | WiFi diagnostics (requires mf_stats_311) |
 
 ### Option 1: Basic Build (Shell Provisioning Only)
 
@@ -383,6 +537,38 @@ The HTTPS client feature enables periodic HTTPS HEAD requests to test network co
    [00:00:19.234] <inf> https_client: HTTP/1.1 200 OK
    ```
 
+### Option 5: Full Features + nRF70 FW Stats CDR (WiFi Diagnostics)
+
+**For advanced WiFi diagnostics** - adds nRF70 firmware statistics collection for debugging connectivity issues:
+
+> ⚠️ **Prerequisite:** Requires the `mf_stats_311` Zephyr branch. See the [nRF70 FW Stats CDR section](#nrf70-firmware-statistics-cdr-custom-data-recording) for setup instructions.
+
+1. **Build with all overlays:**
+   ```bash
+   west build -b nrf7002dk/nrf5340/cpuapp -p -- \
+     -DSB_CONFIG_NETCORE_HCI_IPC=y \
+     -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf;overlay-nrf70-fw-stats-cdr.conf"
+   west flash --erase
+   ```
+
+2. **Features enabled:**
+   - ✅ All Option 4 features (BLE provisioning, HTTPS client)
+   - ✅ nRF70 firmware statistics collection (PHY, LMAC, UMAC)
+   - ✅ CDR upload to Memfault cloud
+   - ✅ Console hex blob output for verification
+
+3. **Collect WiFi diagnostics:**
+   - **Button 1 short press**: Collects nRF70 stats + uploads to Memfault
+   - **Programmatic**: Call `mflt_nrf70_fw_stats_cdr_collect()` on WiFi events
+
+4. **Expected behavior:**
+   ```
+   [00:01:23.456] <inf> memfault_sample: Button 1 short press detected
+   [00:01:23.458] <wrn> mflt_nrf70_fw_stats_cdr: Collecting nRF70 FW stats CDR (limited to 1/24h)...
+   nRF70 FW stats hex blob: e2000000000000000000010000000300...
+   [00:01:23.512] <inf> mflt_nrf70_fw_stats_cdr: nRF70 FW stats CDR collected (644 bytes), uploading...
+   ```
+
 ### Configuration Options
 
 #### HTTPS Client Customization
@@ -490,10 +676,12 @@ Interactive testing and crash generation:
 
 | Button | Press Type | Action | Purpose |
 |--------|-----------|---------|---------|
-| **Button 1** | Short (< 3s) | Trigger Memfault heartbeat | Manual metrics upload |
+| **Button 1** | Short (< 3s) | Trigger Memfault heartbeat + CDR* | Manual metrics/stats upload |
 | **Button 1** | Long (≥ 3s) | Stack overflow crash | Test crash reporting |
 | **Button 2** | Short (< 3s) | Check for OTA update | Manual OTA trigger |
 | **Button 2** | Long (≥ 3s) | Division by zero crash | Test fault handler |
+
+> *CDR collection only when built with `overlay-nrf70-fw-stats-cdr.conf`
 
 ### Automatic OTA Triggers
 
