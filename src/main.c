@@ -16,7 +16,6 @@
 #include <memfault/ports/zephyr/http.h>
 #include <memfault/core/data_packetizer.h>
 #include <memfault/core/log.h>
-#include <memfault/core/log.h>
 #include <memfault/core/trace_event.h>
 #include <memfault/panics/coredump.h>
 #include <memfault_ncs.h>
@@ -40,6 +39,10 @@
 
 #ifdef CONFIG_HTTPS_CLIENT_ENABLED
 #include "https_client.h"
+#endif
+
+#ifdef CONFIG_NRF70_FW_STATS_CDR_ENABLED
+#include "mflt_nrf70_fw_stats_cdr.h"
 #endif
 
 LOG_MODULE_REGISTER(memfault_sample, CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL);
@@ -105,6 +108,21 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 			LOG_INF("Button 1 short press detected, triggering Memfault heartbeat");
 			if (wifi_connected) {
 				memfault_metrics_heartbeat_debug_trigger();
+#ifdef CONFIG_NRF70_FW_STATS_CDR_ENABLED
+				/* Collect nRF70 FW stats for CDR upload.
+				 * WARNING: Memfault CDR is limited to 1 upload per device per 24 hours!
+				 * This is the ONLY place where CDR collection is triggered.
+				 * Enable Developer Mode in Memfault dashboard for higher limits during testing.
+				 */
+				LOG_WRN("Collecting nRF70 FW stats CDR (limited to 1/24h)...");
+				int cdr_err = mflt_nrf70_fw_stats_cdr_collect();
+				if (cdr_err) {
+					LOG_WRN("nRF70 FW stats CDR collection failed: %d", cdr_err);
+				} else {
+					LOG_INF("nRF70 FW stats CDR collected (%zu bytes), uploading...",
+						mflt_nrf70_fw_stats_cdr_get_size());
+				}
+#endif
 				memfault_zephyr_port_post_data();
 			} else {
 				LOG_WRN("WiFi not connected, cannot collect metrics");
@@ -314,6 +332,16 @@ int main(void)
 	err = https_client_init();
 	if (err) {
 		LOG_ERR("HTTPS client initialization failed: %d", err);
+	}
+#endif
+
+#ifdef CONFIG_NRF70_FW_STATS_CDR_ENABLED
+	/* Initialize nRF70 FW stats CDR module */
+	err = mflt_nrf70_fw_stats_cdr_init();
+	if (err) {
+		LOG_ERR("nRF70 FW stats CDR initialization failed: %d", err);
+	} else {
+		LOG_INF("nRF70 FW stats CDR module initialized");
 	}
 #endif
 

@@ -61,3 +61,20 @@ module-str = HTTPS Client
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
 
 endif # HTTPS_CLIENT_ENABLED
+
+config NRF70_FW_STATS_CDR_ENABLED
+	bool "Enable nRF70 firmware statistics CDR upload to Memfault"
+	depends on MEMFAULT_CDR_ENABLE
+	depends on NET_STATISTICS_ETHERNET_VENDOR
+	default n
+	help
+	  Enable collection and upload of nRF70 WiFi firmware statistics
+	  (PHY, LMAC, UMAC) as a Custom Data Recording (CDR) to Memfault cloud.
+	  
+	  TRIGGER: Button 1 short press ONLY (no automatic/periodic collection).
+	  
+	  The statistics blob can be parsed using the nrf70_fw_stats_parser.py
+	  script located at: modules/lib/nrf_wifi/scripts/nrf70_fw_stats_parser.py
+	  
+	  WARNING: CDR uploads are limited to 1 per device per 24 hours!
+	  Enable Developer Mode in Memfault dashboard for higher limits.
