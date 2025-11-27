@@ -6,10 +6,10 @@ A comprehensive Memfault integration sample for Nordic nRF7002DK, demonstrating 
 
 This sample application is built with:
 - **nRF Connect SDK v3.1.1**
-- **Memfault Firmware SDK v1.30.3**
+- **Memfault Firmware SDK v1.31.0**
 - **Board**: nRF7002DK (nRF5340 + nRF7002 WiFi companion chip)
 
-> **Note:** The default Memfault Firmware SDK that ships with NCS v3.1.1 is v1.26.0. This project has been updated to use v1.30.3 for improved features and bug fixes. See the "Updating the memfault-firmware-sdk version" section below for upgrade instructions.
+> **Note:** The default Memfault Firmware SDK that ships with NCS v3.1.1 is v1.26.0. This project has been updated to use v1.31.0 for improved features and bug fixes. See the "Updating the memfault-firmware-sdk version" section below for upgrade instructions.
 
 ## Features
 
@@ -82,7 +82,7 @@ memfault-nrf7002dk/
 
 ### Updating Memfault Firmware SDK Version
 
-The project uses Memfault SDK v1.30.3 (newer than NCS v3.1.1 default v1.26.0).
+The project uses Memfault SDK v1.31.0 (newer than NCS v3.1.1 default v1.26.0).
 
 To change SDK version:
 
@@ -90,7 +90,7 @@ To change SDK version:
    ```yaml
    - name: memfault-firmware-sdk
      path: modules/lib/memfault-firmware-sdk
-     revision: 1.30.3  # Change this
+     revision: 1.31.0  # Change this
      remote: memfault
    ```
 
@@ -104,7 +104,7 @@ To change SDK version:
    ```bash
    cd modules/lib/memfault-firmware-sdk
    git log --oneline -1
-   # Should show: 67244e0 Memfault Firmware SDK 1.30.3 (Build 15552)
+   # Should show: 050c1a5 Memfault Firmware SDK 1.31.0 (Build 15800)
    ```
 
 ### Custom Partition Layout
@@ -254,16 +254,21 @@ void collect_stats_for_event(const char *event_reason) {
 
 #### Parsing the Statistics Blob
 
-The uploaded CDR blob contains raw nRF70 firmware statistics (PHY, LMAC, UMAC counters). Parse using the provided Python script:
+The uploaded CDR blob contains raw nRF70 firmware statistics (PHY, LMAC, UMAC counters). Parse using the provided enhanced Python script which supports both hex strings and binary files:
 
 ```bash
-# Script location after using mf_stats_311 branch
-/opt/nordic/ncs/v3.1.1/modules/lib/nrf_wifi/scripts/nrf70_fw_stats_parser.py
+# Script location
+script/nrf70_fw_stats_parser_enhanced.py
 
-# Parse a downloaded CDR blob
-python3 nrf70_fw_stats_parser.py \
-  --header /opt/nordic/ncs/v3.1.1/modules/lib/nrf_wifi/fw_if/umac_if/inc/fw/host_rpu_sys_if.h \
-  --blob <downloaded_cdr_file.bin>
+# Parse a downloaded CDR blob (binary file)
+./script/nrf70_fw_stats_parser_enhanced.py \
+  /opt/nordic/ncs/v3.1.1/modules/lib/nrf_wifi/fw_if/umac_if/inc/fw/host_rpu_sys_if.h \
+  <downloaded_cdr_file.bin>
+
+# Parse a hex string (from console output)
+./script/nrf70_fw_stats_parser_enhanced.py \
+  /opt/nordic/ncs/v3.1.1/modules/lib/nrf_wifi/fw_if/umac_if/inc/fw/host_rpu_sys_if.h \
+  "e2000000000000000000010000000300..."
 ```
 
 **Cloud-side parsing:** The Python script (or equivalent) can be integrated into Memfault cloud workflows for automatic parsing and analytics.

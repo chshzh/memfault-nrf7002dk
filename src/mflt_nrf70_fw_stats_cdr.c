@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  *
  * nRF70 Firmware Statistics CDR (Custom Data Recording) for Memfault
- * 
+ *
  * This module collects nRF70 WiFi firmware statistics (PHY, LMAC, UMAC)
  * as a binary blob and uploads them to Memfault using the CDR feature.
- * 
+ *
  * The blob can be parsed using the nrf70_fw_stats_parser.py script
  * located at: modules/lib/nrf_wifi/scripts/nrf70_fw_stats_parser.py
  */
@@ -33,9 +33,7 @@ static bool read_data_cb(uint32_t offset, void *buf, size_t buf_len);
 static void mark_cdr_read_cb(void);
 
 /* MIME types for the CDR payload */
-static const char * const mimetypes[] = {
-	MEMFAULT_CDR_BINARY
-};
+static const char *const mimetypes[] = {MEMFAULT_CDR_BINARY};
 
 /* Buffer to hold the collected nRF70 FW stats blob */
 static uint8_t s_nrf70_fw_stats_blob[NRF70_FW_STATS_BLOB_MAX_SIZE];
@@ -71,7 +69,7 @@ static bool has_cdr_cb(sMemfaultCdrMetadata *metadata)
 
 	s_nrf70_fw_stats_metadata.data_size_bytes = s_nrf70_fw_stats_blob_size;
 	*metadata = s_nrf70_fw_stats_metadata;
-	
+
 	LOG_DBG("CDR data available: %zu bytes", s_nrf70_fw_stats_blob_size);
 	return true;
 }
@@ -108,7 +106,7 @@ static bool read_data_cb(uint32_t offset, void *buf, size_t buf_len)
 static void mark_cdr_read_cb(void)
 {
 	LOG_INF("nRF70 FW stats CDR data uploaded successfully");
-	
+
 	/* Reset state for next collection */
 	s_cdr_data_ready = false;
 	s_nrf70_fw_stats_blob_size = 0;
@@ -118,7 +116,7 @@ static void mark_cdr_read_cb(void)
 
 /**
  * @brief Collect nRF70 firmware statistics into the blob buffer
- * 
+ *
  * @return 0 on success, negative error code on failure
  */
 static int collect_nrf70_fw_stats(void)
@@ -164,23 +162,23 @@ static int collect_nrf70_fw_stats(void)
 
 	/* Collect vendor stats as binary blob */
 	LOG_INF("Collecting nRF70 firmware statistics...");
-	
+
 	size_t i = 0;
 	while (stats->vendor[i].key != NULL && blob_offset < NRF70_FW_STATS_BLOB_MAX_SIZE - 4) {
 		uint32_t value = stats->vendor[i].value;
-		
+
 		/* Store as little-endian (matching shell output format) */
 		s_nrf70_fw_stats_blob[blob_offset++] = (uint8_t)(value & 0xFF);
 		s_nrf70_fw_stats_blob[blob_offset++] = (uint8_t)((value >> 8) & 0xFF);
 		s_nrf70_fw_stats_blob[blob_offset++] = (uint8_t)((value >> 16) & 0xFF);
 		s_nrf70_fw_stats_blob[blob_offset++] = (uint8_t)((value >> 24) & 0xFF);
-		
+
 		i++;
 	}
 
 	s_nrf70_fw_stats_blob_size = blob_offset;
-	LOG_INF("Collected %zu bytes of nRF70 FW stats (%zu fields)", 
-		s_nrf70_fw_stats_blob_size, i);
+	LOG_INF("Collected %zu bytes of nRF70 FW stats (%zu fields)", s_nrf70_fw_stats_blob_size,
+		i);
 
 	return 0;
 #else
@@ -191,7 +189,7 @@ static int collect_nrf70_fw_stats(void)
 
 /**
  * @brief Initialize the nRF70 FW stats CDR module
- * 
+ *
  * @return 0 on success, negative error code on failure
  */
 int mflt_nrf70_fw_stats_cdr_init(void)
@@ -211,7 +209,7 @@ int mflt_nrf70_fw_stats_cdr_init(void)
 
 	initialized = true;
 	LOG_INF("nRF70 FW stats CDR module initialized");
-	
+
 	return 0;
 }
 
@@ -234,11 +232,11 @@ static void print_blob_hex(void)
 
 /**
  * @brief Trigger collection of nRF70 FW stats for CDR upload
- * 
+ *
  * Call this function to collect current nRF70 firmware statistics
  * and prepare them for upload to Memfault. The data will be uploaded
  * during the next Memfault data post operation.
- * 
+ *
  * @return 0 on success, negative error code on failure
  */
 int mflt_nrf70_fw_stats_cdr_collect(void)
@@ -267,19 +265,19 @@ int mflt_nrf70_fw_stats_cdr_collect(void)
 	}
 
 	/* Print blob hex for debugging/verification */
-	print_blob_hex();
+	// print_blob_hex();
 
 	/* Mark data as ready for upload */
 	s_cdr_data_ready = true;
-	
+
 	LOG_INF("nRF70 FW stats CDR ready for upload (%zu bytes)", s_nrf70_fw_stats_blob_size);
-	
+
 	return 0;
 }
 
 /**
  * @brief Check if nRF70 FW stats CDR data is pending upload
- * 
+ *
  * @return true if data is waiting to be uploaded
  */
 bool mflt_nrf70_fw_stats_cdr_is_pending(void)
@@ -289,11 +287,10 @@ bool mflt_nrf70_fw_stats_cdr_is_pending(void)
 
 /**
  * @brief Get the size of collected nRF70 FW stats
- * 
+ *
  * @return Size in bytes, or 0 if no data collected
  */
 size_t mflt_nrf70_fw_stats_cdr_get_size(void)
 {
 	return s_nrf70_fw_stats_blob_size;
 }
-
