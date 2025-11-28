@@ -2,8 +2,7 @@
 # Copyright (c) 2025, Nordic Semiconductor ASA
 # SPDX-License-Identifier: Apache-2.0
 """
-Parse nRF70 rpu_sys_fw_stats using header file definitions.
-Enhanced version to support both hex strings and binary files.
+Parse nRF70 rpu_sys_fw_stats using header file definitions
 """
 
 import struct
@@ -252,7 +251,7 @@ class StructParser:
 def main():
     parser = argparse.ArgumentParser(description='Parse rpu_sys_fw_stats from hex blob or binary file using header file')
     parser.add_argument('header_file', help='Path to header file containing struct definitions')
-    parser.add_argument('blob', help='Hex blob string OR path to binary file')
+    parser.add_argument('hex_blob', help='Hex blob data string or path to binary file')
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
     
     args = parser.parse_args()

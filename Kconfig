@@ -65,11 +65,14 @@ endif # HTTPS_CLIENT_ENABLED
 config NRF70_FW_STATS_CDR_ENABLED
 	bool "Enable nRF70 firmware statistics CDR upload to Memfault"
 	depends on MEMFAULT_CDR_ENABLE
-	depends on NET_STATISTICS_ETHERNET_VENDOR
+	depends on WIFI_NRF70
 	default n
 	help
 	  Enable collection and upload of nRF70 WiFi firmware statistics
 	  (PHY, LMAC, UMAC) as a Custom Data Recording (CDR) to Memfault cloud.
+	  
+	  Uses direct FMAC API (nrf_wifi_sys_fmac_stats_get) for ON-DEMAND
+	  stats collection. No per-packet polling occurs.
 	  
 	  TRIGGER: Button 1 short press ONLY (no automatic/periodic collection).
 	  

@@ -110,16 +110,19 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 				memfault_metrics_heartbeat_debug_trigger();
 #ifdef CONFIG_NRF70_FW_STATS_CDR_ENABLED
 				/* Collect nRF70 FW stats for CDR upload.
-				 * WARNING: Memfault CDR is limited to 1 upload per device per 24 hours!
-				 * This is the ONLY place where CDR collection is triggered.
-				 * Enable Developer Mode in Memfault dashboard for higher limits during testing.
+				 * WARNING: Memfault CDR is limited to 1 upload per device per 24
+				 * hours! This is the ONLY place where CDR collection is triggered.
+				 * Enable Developer Mode in Memfault dashboard for higher limits
+				 * during testing.
 				 */
 				LOG_WRN("Collecting nRF70 FW stats CDR (limited to 1/24h)...");
 				int cdr_err = mflt_nrf70_fw_stats_cdr_collect();
 				if (cdr_err) {
-					LOG_WRN("nRF70 FW stats CDR collection failed: %d", cdr_err);
+					LOG_WRN("nRF70 FW stats CDR collection failed: %d",
+						cdr_err);
 				} else {
-					LOG_INF("nRF70 FW stats CDR collected (%zu bytes), uploading...",
+					LOG_INF("nRF70 FW stats CDR collected (%zu bytes), "
+						"uploading...",
 						mflt_nrf70_fw_stats_cdr_get_size());
 				}
 #endif

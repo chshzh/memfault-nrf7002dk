@@ -8,19 +8,32 @@
  * This module collects nRF70 WiFi firmware statistics (PHY, LMAC, UMAC)
  * as a binary blob and uploads them to Memfault using the CDR feature.
  *
+ * IMPLEMENTATION: Uses direct FMAC API (nrf_wifi_sys_fmac_stats_get) like
+ * wifi_util.c does. This provides ON-DEMAND stats collection without
+ * per-packet polling overhead.
+ *
  * The blob can be parsed using the nrf70_fw_stats_parser.py script
  * located at: modules/lib/nrf_wifi/scripts/nrf70_fw_stats_parser.py
  */
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/net/net_if.h>
-#include <zephyr/net/ethernet.h>
-#include <zephyr/net/net_stats.h>
 #include <string.h>
+
+/* Direct FMAC API access - same includes as wifi_util.c */
+#include "host_rpu_umac_if.h"
+#include "system/fmac_api.h"
+#include "fmac_main.h"
+
+/* Stats structure definitions */
+#include "rpu_lmac_phy_stats.h"
+#include "rpu_umac_stats.h"
 
 #include "memfault/components.h"
 #include "memfault/core/data_packetizer.h"
+
+/* External reference to the global nRF70 driver context (same as wifi_util.c) */
+extern struct nrf_wifi_drv_priv_zep rpu_drv_priv_zep;
 
 LOG_MODULE_REGISTER(mflt_nrf70_fw_stats_cdr, CONFIG_MEMFAULT_SAMPLE_LOG_LEVEL);
 
@@ -117,74 +130,57 @@ static void mark_cdr_read_cb(void)
 /**
  * @brief Collect nRF70 firmware statistics into the blob buffer
  *
+ * Uses direct FMAC API (nrf_wifi_sys_fmac_stats_get) like wifi_util.c does.
+ * This provides ON-DEMAND stats collection without per-packet polling.
+ *
  * @return 0 on success, negative error code on failure
  */
 static int collect_nrf70_fw_stats(void)
 {
-	struct net_if *iface;
-	const struct ethernet_api *eth_api;
-	struct net_stats_eth *stats;
-	size_t blob_offset = 0;
+	struct nrf_wifi_ctx_zep *ctx = &rpu_drv_priv_zep.rpu_ctx_zep;
+	struct nrf_wifi_fmac_dev_ctx *fmac_dev_ctx = NULL;
+	struct rpu_sys_op_stats stats;
+	enum nrf_wifi_status status;
+	int ret = 0;
 
-	/* Find the WiFi interface */
-	iface = net_if_get_default();
-	if (!iface) {
-		LOG_ERR("No default network interface");
-		return -ENODEV;
+	/* Lock the RPU context (same pattern as wifi_util.c) */
+	k_mutex_lock(&ctx->rpu_lock, K_FOREVER);
+
+	if (!ctx->rpu_ctx) {
+		LOG_ERR("RPU context not initialized - WiFi not started?");
+		ret = -ENODEV;
+		goto unlock;
 	}
 
-	/* Verify it's an Ethernet/WiFi interface */
-	if (net_if_l2(iface) != &NET_L2_GET_NAME(ETHERNET)) {
-		LOG_ERR("Default interface is not Ethernet/WiFi");
-		return -ENOTSUP;
+	fmac_dev_ctx = ctx->rpu_ctx;
+
+	LOG_INF("Collecting nRF70 firmware statistics (direct FMAC API)...");
+
+	/* Query RPU stats directly - same call as wifi_util.c:nrf_wifi_util_dump_rpu_stats() */
+	memset(&stats, 0, sizeof(struct rpu_sys_op_stats));
+	status = nrf_wifi_sys_fmac_stats_get(fmac_dev_ctx, 0, &stats);
+
+	if (status != NRF_WIFI_STATUS_SUCCESS) {
+		LOG_ERR("Failed to get RPU stats: %d", status);
+		ret = -EIO;
+		goto unlock;
 	}
 
-	/* Get the Ethernet API */
-	eth_api = (const struct ethernet_api *)net_if_get_device(iface)->api;
-	if (!eth_api || !eth_api->get_stats) {
-		LOG_ERR("Ethernet API or get_stats not available");
-		return -ENOTSUP;
+	/* Copy the firmware stats structure directly as the blob */
+	size_t fw_stats_size = sizeof(stats.fw);
+	if (fw_stats_size > NRF70_FW_STATS_BLOB_MAX_SIZE) {
+		LOG_WRN("FW stats truncated: %zu > %d bytes", fw_stats_size, NRF70_FW_STATS_BLOB_MAX_SIZE);
+		fw_stats_size = NRF70_FW_STATS_BLOB_MAX_SIZE;
 	}
 
-	/* Get the statistics */
-	stats = eth_api->get_stats(net_if_get_device(iface));
-	if (!stats) {
-		LOG_ERR("Failed to get Ethernet stats");
-		return -EIO;
-	}
+	memcpy(s_nrf70_fw_stats_blob, &stats.fw, fw_stats_size);
+	s_nrf70_fw_stats_blob_size = fw_stats_size;
 
-#if defined(CONFIG_NET_STATISTICS_ETHERNET_VENDOR)
-	/* Check if vendor stats are available */
-	if (!stats->vendor) {
-		LOG_WRN("No vendor statistics available");
-		return -ENODATA;
-	}
+	LOG_INF("Collected %zu bytes of nRF70 FW stats (UMAC+LMAC+PHY)", s_nrf70_fw_stats_blob_size);
 
-	/* Collect vendor stats as binary blob */
-	LOG_INF("Collecting nRF70 firmware statistics...");
-
-	size_t i = 0;
-	while (stats->vendor[i].key != NULL && blob_offset < NRF70_FW_STATS_BLOB_MAX_SIZE - 4) {
-		uint32_t value = stats->vendor[i].value;
-
-		/* Store as little-endian (matching shell output format) */
-		s_nrf70_fw_stats_blob[blob_offset++] = (uint8_t)(value & 0xFF);
-		s_nrf70_fw_stats_blob[blob_offset++] = (uint8_t)((value >> 8) & 0xFF);
-		s_nrf70_fw_stats_blob[blob_offset++] = (uint8_t)((value >> 16) & 0xFF);
-		s_nrf70_fw_stats_blob[blob_offset++] = (uint8_t)((value >> 24) & 0xFF);
-
-		i++;
-	}
-
-	s_nrf70_fw_stats_blob_size = blob_offset;
-	LOG_INF("Collected %zu bytes of nRF70 FW stats (%zu fields)", s_nrf70_fw_stats_blob_size,
-		i);
-
-	return 0;
-#else
-	LOG_ERR("CONFIG_NET_STATISTICS_ETHERNET_VENDOR not enabled");
-	return -ENOTSUP;
-#endif
+unlock:
+	k_mutex_unlock(&ctx->rpu_lock);
+	return ret;
 }
 
 /**
@@ -213,22 +209,7 @@ int mflt_nrf70_fw_stats_cdr_init(void)
 	return 0;
 }
 
-/**
- * @brief Print the collected blob as hex string (for debugging/verification)
- */
-static void print_blob_hex(void)
-{
-	if (s_nrf70_fw_stats_blob_size == 0) {
-		return;
-	}
 
-	/* Print in chunks to avoid log buffer overflow */
-	printk("nRF70 FW stats hex blob: ");
-	for (size_t i = 0; i < s_nrf70_fw_stats_blob_size; i++) {
-		printk("%02x", s_nrf70_fw_stats_blob[i]);
-	}
-	printk("\n");
-}
 
 /**
  * @brief Trigger collection of nRF70 FW stats for CDR upload
@@ -264,8 +245,6 @@ int mflt_nrf70_fw_stats_cdr_collect(void)
 		return -ENODATA;
 	}
 
-	/* Print blob hex for debugging/verification */
-	// print_blob_hex();
 
 	/* Mark data as ready for upload */
 	s_cdr_data_ready = true;

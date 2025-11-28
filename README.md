@@ -23,14 +23,6 @@ This sample application is built with:
 - ✅ **MCUBoot Bootloader** - Dual-bank firmware updates with rollback protection
 - ✅ **nRF70 FW Stats CDR** - WiFi firmware diagnostics via Custom Data Recording
 
-### Custom Implementations
-- **WiFi Metrics** (`mflt_wifi_metrics.c`) - RSSI, connection quality tracking
-- **Stack Metrics** (`mflt_stack_metrics.c`) - Per-thread stack usage monitoring
-- **OTA Triggers** (`mflt_ota_triggers.c`) - Automatic OTA checks on network events
-- **HTTPS Client** (`https_client.c`) - Periodic HEAD requests with certificate validation
-- **BLE Provisioning** (`ble_provisioning.c`) - Nordic WiFi Provisioning Service integration
-- **nRF70 FW Stats CDR** (`mflt_nrf70_fw_stats_cdr.c`) - WiFi firmware statistics collection for cloud diagnostics
-
 ## Hardware Requirements
 
 - **nRF7002DK** development kit
@@ -157,30 +149,14 @@ See `components/include/memfault/core/platform/nonvolatile_event_storage.h`
 
 This feature enables collection and upload of nRF70 WiFi firmware statistics (PHY, LMAC, UMAC) to Memfault cloud using the [Custom Data Recording (CDR)](https://docs.memfault.com/docs/mcu/custom-data-recording) feature. This is valuable for diagnosing WiFi connectivity issues in production deployments.
 
-#### Prerequisites
+#### Implementation
 
-This feature requires a modified Zephyr with vendor statistics support. You need to use the `mf_stats_311` branch from the Nordic fork:
+This implementation uses the **direct FMAC API** (`nrf_wifi_sys_fmac_stats_get`) like the driver's `wifi_util.c` does. This provides:
 
-1. **Modify** `/opt/nordic/ncs/v3.1.1/nrf/west.yml`:
-   ```yaml
-   remotes:
-     # Add this remote
-     - name: krish2718
-       url-base: https://github.com/krish2718
-   
-   projects:
-     - name: zephyr
-       repo-path: sdk-zephyr
-       remote: krish2718           # Change from ncsinternal
-       revision: mf_stats_311      # Use the stats branch
-   ```
-
-2. **Update Zephyr:**
-   ```bash
-   cd /opt/nordic/ncs/v3.1.1/zephyr
-   git fetch krish2718 mf_stats_311
-   git reset --hard krish2718/mf_stats_311
-   ```
+- ✅ **ON-DEMAND collection only** - No per-packet polling overhead
+- ✅ **No extra Kconfig needed** - Works with standard NCS v3.1.1
+- ✅ **Clean logs** - No "Stats request already pending" errors
+- ✅ **Single ~50ms blocking call** per collection request
 
 #### Building with CDR Support
 
@@ -195,7 +171,6 @@ west flash --erase
 
 **Manual Collection (Button 1 short press):**
 - Press Button 1 to collect nRF70 FW stats and upload to Memfault
-- The hex blob is printed to console for verification
 - Data uploads during the next `memfault_zephyr_port_post_data()` call
 
 **Programmatic Collection:**
@@ -254,7 +229,7 @@ void collect_stats_for_event(const char *event_reason) {
 
 #### Parsing the Statistics Blob
 
-The uploaded CDR blob contains raw nRF70 firmware statistics (PHY, LMAC, UMAC counters). Parse using the provided enhanced Python script which supports both hex strings and binary files:
+The uploaded CDR blob contains raw nRF70 firmware statistics (PHY, LMAC, UMAC counters). Parse using the provided Python script:
 
 ```bash
 # Script location
@@ -264,11 +239,6 @@ script/nrf70_fw_stats_parser_enhanced.py
 ./script/nrf70_fw_stats_parser_enhanced.py \
   /opt/nordic/ncs/v3.1.1/modules/lib/nrf_wifi/fw_if/umac_if/inc/fw/host_rpu_sys_if.h \
   <downloaded_cdr_file.bin>
-
-# Parse a hex string (from console output)
-./script/nrf70_fw_stats_parser_enhanced.py \
-  /opt/nordic/ncs/v3.1.1/modules/lib/nrf_wifi/fw_if/umac_if/inc/fw/host_rpu_sys_if.h \
-  "e2000000000000000000010000000300..."
 ```
 
 **Cloud-side parsing:** The Python script (or equivalent) can be integrated into Memfault cloud workflows for automatic parsing and analytics.
@@ -289,23 +259,30 @@ script/nrf70_fw_stats_parser_enhanced.py
 │   WiFi Event    │────▶│  CDR Collector  │────▶│    Memfault     │
 │  (App-level)    │     │  (Binary Blob)  │     │     Cloud       │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                        │
-                                                        ▼
-                                               ┌─────────────────┐
-                                               │  Python Parser  │
-                                               │  (Analytics)    │
-                                               └─────────────────┘
+         │                      │                       │
+         │              Direct FMAC API                 ▼
+         │         nrf_wifi_sys_fmac_stats_get  ┌─────────────────┐
+         │              (ON-DEMAND only)        │  Python Parser  │
+         │                                      │  (Analytics)    │
+         └──────────────────────────────────────└─────────────────┘
 ```
 
-#### Known Issues
+#### Technical Details
 
-When `CONFIG_NET_STATISTICS_ETHERNET_VENDOR=y` is enabled, you may see `<err>` logs during heavy network traffic:
+The implementation directly accesses the nRF70 driver internals (same pattern as `wifi_util.c`):
 
+```c
+/* Same external reference as wifi_util.c */
+extern struct nrf_wifi_drv_priv_zep rpu_drv_priv_zep;
+
+/* Same stats collection pattern as wifi_util.c */
+struct nrf_wifi_ctx_zep *ctx = &rpu_drv_priv_zep.rpu_ctx_zep;
+k_mutex_lock(&ctx->rpu_lock, K_FOREVER);
+nrf_wifi_sys_fmac_stats_get(ctx->rpu_ctx, 0, &stats);
+k_mutex_unlock(&ctx->rpu_lock);
 ```
-<err> wifi_nrf: nrf_wifi_sys_fmac_stats_get: Stats request already pending
-```
 
-**These errors are harmless** - they occur because the network stack queries stats on every packet, and concurrent requests are rejected. The CDR button press collection works correctly as an isolated request.
+This approach bypasses the Ethernet API (which would trigger stats queries on every packet when `CONFIG_NET_STATISTICS_ETHERNET_VENDOR=y` is enabled), providing clean ON-DEMAND collection without any per-packet overhead.
 
 ## Contributing
 
@@ -425,7 +402,7 @@ Before building, ensure you have:
 | **Option 2** | BLE mobile app | ❌ | ❌ | Yes | Production WiFi setup |
 | **Option 3** | Shell commands | ✅ | ❌ | No | Connectivity testing |
 | **Option 4** ⭐ | BLE mobile app | ✅ | ❌ | Yes | **Production (Recommended)** |
-| **Option 5** | BLE mobile app | ✅ | ✅ | Yes | WiFi diagnostics (requires mf_stats_311) |
+| **Option 5** | BLE mobile app | ✅ | ✅ | Yes | WiFi diagnostics |
 
 ### Option 1: Basic Build (Shell Provisioning Only)
 
@@ -546,8 +523,6 @@ The HTTPS client feature enables periodic HTTPS HEAD requests to test network co
 
 **For advanced WiFi diagnostics** - adds nRF70 firmware statistics collection for debugging connectivity issues:
 
-> ⚠️ **Prerequisite:** Requires the `mf_stats_311` Zephyr branch. See the [nRF70 FW Stats CDR section](#nrf70-firmware-statistics-cdr-custom-data-recording) for setup instructions.
-
 1. **Build with all overlays:**
    ```bash
    west build -b nrf7002dk/nrf5340/cpuapp -p -- \
@@ -559,8 +534,7 @@ The HTTPS client feature enables periodic HTTPS HEAD requests to test network co
 2. **Features enabled:**
    - ✅ All Option 4 features (BLE provisioning, HTTPS client)
    - ✅ nRF70 firmware statistics collection (PHY, LMAC, UMAC)
-   - ✅ CDR upload to Memfault cloud
-   - ✅ Console hex blob output for verification
+   - ✅ CDR upload to Memfault cloud (ON-DEMAND only, no per-packet overhead)
 
 3. **Collect WiFi diagnostics:**
    - **Button 1 short press**: Collects nRF70 stats + uploads to Memfault
@@ -569,9 +543,10 @@ The HTTPS client feature enables periodic HTTPS HEAD requests to test network co
 4. **Expected behavior:**
    ```
    [00:01:23.456] <inf> memfault_sample: Button 1 short press detected
-   [00:01:23.458] <wrn> mflt_nrf70_fw_stats_cdr: Collecting nRF70 FW stats CDR (limited to 1/24h)...
-   nRF70 FW stats hex blob: e2000000000000000000010000000300...
-   [00:01:23.512] <inf> mflt_nrf70_fw_stats_cdr: nRF70 FW stats CDR collected (644 bytes), uploading...
+   [00:01:23.458] <wrn> memfault_sample: Collecting nRF70 FW stats CDR (limited to 1/24h)...
+   [00:01:23.460] <inf> mflt_nrf70_fw_stats_cdr: Collecting nRF70 firmware statistics (direct FMAC API)...
+   [00:01:23.510] <inf> mflt_nrf70_fw_stats_cdr: Collected 644 bytes of nRF70 FW stats (UMAC+LMAC+PHY)
+   [00:01:23.512] <inf> memfault_sample: nRF70 FW stats CDR collected (644 bytes), uploading...
    ```
 
 ### Configuration Options
