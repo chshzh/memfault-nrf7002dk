@@ -40,13 +40,25 @@ void mflt_wifi_metrics_collect(void)
 	MEMFAULT_METRIC_SET_UNSIGNED(ncs_wifi_channel, status.channel);
 	MEMFAULT_METRIC_SET_UNSIGNED(ncs_wifi_link_mode, status.link_mode);
 
+	/* Log all WiFi metrics using metric names */
+	LOG_INF("ncs_wifi_rssi=%d dBm", status.rssi);
+	LOG_INF("ncs_wifi_channel=%u", status.channel);
+	LOG_INF("ncs_wifi_link_mode=%u (%s)", status.link_mode,
+		status.link_mode == WIFI_0 ? "802.11b" :
+		status.link_mode == WIFI_1 ? "802.11a" :
+		status.link_mode == WIFI_2 ? "802.11g" :
+		status.link_mode == WIFI_3 ? "802.11n" :
+		status.link_mode == WIFI_4 ? "802.11ac" :
+		status.link_mode == WIFI_5 ? "802.11ax" :
+		status.link_mode == WIFI_6 ? "802.11ax" :
+		status.link_mode == WIFI_6E ? "802.11ax-6GHz" : "Unknown");
+
 	/* Set TX rate if available (some devices may not have this value set) */
 	if (status.current_phy_tx_rate > 0.0f) {
 		MEMFAULT_METRIC_SET_UNSIGNED(ncs_wifi_tx_rate_mbps,
 					     (uint32_t)status.current_phy_tx_rate);
-		LOG_INF("TX Rate: %.1f Mbps", (double)status.current_phy_tx_rate);
+		LOG_INF("ncs_wifi_tx_rate_mbps=%.1f Mbps", (double)status.current_phy_tx_rate);
 	} else {
-		LOG_INF("TX Rate not available (driver may not support or no data transmitted "
-			"yet)");
+		LOG_INF("ncs_wifi_tx_rate_mbps not available yet");
 	}
 }
