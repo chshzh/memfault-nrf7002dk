@@ -1,6 +1,6 @@
 # Memfault nRF7002DK Sample
 
-A comprehensive Memfault integration sample for Nordic nRF7002DK, demonstrating production-ready IoT device management with Wi-Fi connectivity, BLE provisioning, HTTPS communication, and cloud-based monitoring.
+A comprehensive Memfault integration sample for Nordic nRF7002DK, demonstrating IoT device management with Wi-Fi connectivity, BLE provisioning, HTTPS communication, and cloud-based monitoring.
 
 ## Overview
 
@@ -16,12 +16,14 @@ This sample application is built with:
 ### Core Capabilities
 - ✅ **Wi-Fi Connectivity** - WPA2/WPA3 support with automatic reconnection
 - ✅ **BLE Provisioning** - Configure WiFi credentials wirelessly via mobile app
-- ✅ **HTTPS Client** - Periodic connectivity testing with TLS 1.2/1.3
 - ✅ **Crash Reporting** - Automatic coredump collection and upload
 - ✅ **Metrics Collection** - WiFi signal strength, stack usage, heap statistics
 - ✅ **OTA Updates** - Secure firmware updates via Memfault cloud
 - ✅ **MCUBoot Bootloader** - Dual-bank firmware updates with rollback protection
-- ✅ **nRF70 FW Stats CDR** - WiFi firmware diagnostics via Custom Data Recording
+
+### Optional Features (via overlays)
+- ✅ **HTTPS Client** - Periodic connectivity testing with TLS 1.2/1.3 (`overlay-https-req.conf`)
+- ✅ **nRF70 FW Stats CDR** - WiFi firmware diagnostics via Custom Data Recording (`overlay-nrf70-fw-stats-cdr.conf`)
 
 ## Hardware Requirements
 
@@ -37,12 +39,15 @@ This sample application is built with:
    ```properties
    CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key_here"
    ```
-3. **Build and flash** (recommended: Option 4 with all features):
+3. **Build and flash** (BLE provisioning enabled by default):
    ```bash
-   west build -b nrf7002dk/nrf5340/cpuapp -p -- -DSB_CONFIG_NETCORE_HCI_IPC=y -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf"
+   west build -b nrf7002dk/nrf5340/cpuapp -p
    west flash --erase
    ```
-4. **Provision WiFi** using the nRF Wi-Fi Provisioner mobile app
+4. **Provision WiFi** using the nRF Wi-Fi Provisioner mobile app:
+   - [Android](https://play.google.com/store/apps/details?id=no.nordicsemi.android.wifi.provisioning) | [iOS](https://apps.apple.com/app/nrf-wi-fi-provisioner/id1638948698)
+   - Connect to device `PV<MAC>` (e.g., `PV006EB1`)
+   - Select WiFi network and enter password
 5. **Monitor device** on Memfault dashboard
 
 ## Project Structure
@@ -57,15 +62,15 @@ memfault-nrf7002dk/
 │   ├── mflt_wifi_metrics.c/h        # WiFi metrics collection
 │   ├── mflt_stack_metrics.c/h       # Stack usage tracking
 │   └── mflt_nrf70_fw_stats_cdr.c/h  # nRF70 FW stats CDR collection
-├── boards/                           # Board-specific configs
+├── boards/
+│   └── nrf7002dk_nrf5340_cpuapp.conf # Board config (BLE prov enabled by default)
 ├── cert/                             # TLS certificates
 │   └── DigiCertGlobalG3.pem         # Root CA for HTTPS
 ├── config/                           # Memfault config templates
 ├── sysbuild/                         # Multi-image build configs
-├── prj.conf                          # Main project configuration
-├── overlay-ble-prov.conf            # BLE provisioning overlay
-├── overlay-https-req.conf           # HTTPS client overlay
-├── overlay-nrf70-fw-stats-cdr.conf  # nRF70 FW stats CDR overlay
+├── prj.conf                          # Main project configuration (Memfault settings)
+├── overlay-https-req.conf           # HTTPS client overlay (optional)
+├── overlay-nrf70-fw-stats-cdr.conf  # nRF70 FW stats CDR overlay (optional)
 ├── pm_static_*.yml                  # Flash partition layout
 └── README.md                         # This file
 ```
@@ -162,8 +167,7 @@ This implementation uses the **direct FMAC API** (`nrf_wifi_sys_fmac_stats_get`)
 
 ```bash
 west build -b nrf7002dk/nrf5340/cpuapp -p -- \
-  -DSB_CONFIG_NETCORE_HCI_IPC=y \
-  -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-nrf70-fw-stats-cdr.conf"
+  -DEXTRA_CONF_FILE="overlay-nrf70-fw-stats-cdr.conf"
 west flash --erase
 ```
 
@@ -231,14 +235,56 @@ void collect_stats_for_event(const char *event_reason) {
 
 The uploaded CDR blob contains raw nRF70 firmware statistics (PHY, LMAC, UMAC counters). Parse using the provided Python script:
 
+**Usage:**
 ```bash
-# Script location
-script/nrf70_fw_stats_parser_enhanced.py
+python3 script/nrf70_fw_stats_parser_enhanced.py <header_file> <blob_file>
+```
 
-# Parse a downloaded CDR blob (binary file)
-./script/nrf70_fw_stats_parser_enhanced.py \
+**Arguments:**
+- `header_file`: Path to `host_rpu_sys_if.h` from your NCS installation
+- `blob_file`: Binary file downloaded from Memfault CDR (filename pattern: `<DeviceSerial>_nrf70-fw-stats_<timestamp>.bin`)
+
+**Example:**
+```bash
+# Parse a downloaded CDR blob from Memfault
+python3 script/nrf70_fw_stats_parser_enhanced.py \
   /opt/nordic/ncs/v3.1.1/modules/lib/nrf_wifi/fw_if/umac_if/inc/fw/host_rpu_sys_if.h \
-  <downloaded_cdr_file.bin>
+  ~/Downloads/F4CE36006EB1_nrf70-fw-stats_20251128-111955.bin
+```
+
+**Sample Output:**
+```
+PHY stats
+======================
+rssi_avg: -72
+pdout_val: 0
+ofdm_crc32_pass_cnt: 689
+ofdm_crc32_fail_cnt: 2238
+dsss_crc32_pass_cnt: 1252
+dsss_crc32_fail_cnt: 280
+
+LMAC stats
+======================
+reset_cmd_cnt: 1
+tx_pkt_cnt: 75
+tx_pkt_done_cnt: 75
+rx_mpdu_crc_success_cnt: 1941
+rx_mpdu_crc_fail_cnt: 2518
+...
+
+UMAC TX debug stats
+======================
+tx_cmd: 59
+tx_done_success_pkts_to_host: 59
+tx_done_failure_pkts_to_host: 0
+...
+
+UMAC RX debug stats
+======================
+rx_events: 466
+total_rx_pkts_from_lmac: 472
+host_consumed_pkts: 55
+...
 ```
 
 **Cloud-side parsing:** The Python script (or equivalent) can be integrated into Memfault cloud workflows for automatic parsing and analytics.
@@ -396,62 +442,43 @@ Before building, ensure you have:
 
 ### Build Options Comparison
 
-| Option | WiFi Provisioning | HTTPS Client | nRF70 CDR | BLE Required | Use Case |
-|--------|------------------|--------------|-----------|--------------|----------|
-| **Option 1** | Shell commands | ❌ | ❌ | No | Development/Testing |
-| **Option 2** | BLE mobile app | ❌ | ❌ | Yes | Production WiFi setup |
-| **Option 3** | Shell commands | ✅ | ❌ | No | Connectivity testing |
-| **Option 4** ⭐ | BLE mobile app | ✅ | ❌ | Yes | **Production (Recommended)** |
-| **Option 5** | BLE mobile app | ✅ | ✅ | Yes | WiFi diagnostics |
+| Option | HTTPS Client | nRF70 CDR | Use Case |
+|--------|--------------|-----------|----------|
+| **Option 1** ⭐ | ❌ | ❌ | **Default (BLE Provisioning)** |
+| **Option 2** | ✅ | ❌ | BLE + HTTPS Connectivity Testing |
+| **Option 3** | ✅ | ✅ | BLE + HTTPS + WiFi Diagnostics |
 
-### Option 1: Basic Build (Shell Provisioning Only)
+> **Note:** BLE provisioning is enabled by default in `boards/nrf7002dk_nrf5340_cpuapp.conf`. All build options include wireless WiFi provisioning via the nRF Wi-Fi Provisioner mobile app.
 
-Follow these steps for the standard build that uses shell commands to configure WiFi:
+### Option 1: Default Build (BLE Provisioning) ⭐
 
-1. Retrieve the project key from your Memfault **Project Settings** page and set it in `CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key"` inside `prj.conf`.
-2. Build and flash the firmware:
-   ```sh
-   west build -b nrf7002dk/nrf5340/cpuapp
-   west flash --erase
-   ```
-3. After flashing, connect to the UART shell (115200 baud) and provide Wi-Fi credentials so the device can reconnect automatically on subsequent boots:
-   ```
-   uart:~$ wifi cred add -s YOURSSID -k 1 -p YOURPASSWORD
-   uart:~$ wifi cred auto_connect
-   [00:03:45.745,330] <inf> wpa_supp: wlan0: SME: Trying to authenticate with 82:cf:84:3c:f6:41 (SSID='YOURSSID' freq=2437 MHz)
-   [00:03:46.116,058] <inf> wpa_supp: wlan0: Trying to associate with 82:cf:84:3c:f6:41 (SSID='YOURSSID' freq=2437 MHz)
-   [00:03:46.174,163] <inf> wpa_supp: wlan0: Associated with 82:cf:84:3c:f6:41
-   [00:03:46.175,445] <inf> wpa_supp: wlan0: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
-   [00:03:46.216,308] <inf> wpa_supp: wlan0: WPA: Key negotiation completed with 82:cf:84:3c:f6:41 [PTK=CCMP GTK=CCMP]
-   [00:03:46.216,796] <inf> wpa_supp: wlan0: CTRL-EVENT-CONNECTED - Connection to 82:cf:84:3c:f6:41 completed [id=0 id_str=]
-   Connected
+**Recommended for most deployments** - BLE provisioning enabled by default:
+
+1. **Set your Memfault project key** in `prj.conf`:
+   ```properties
+   CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key_here"
    ```
 
-### Option 2: Building with BLE Provisioning
-
-The BLE provisioning feature allows you to configure WiFi credentials wirelessly via Bluetooth LE using the nRF Wi-Fi Provisioner mobile app:
-
-1. Build with the BLE provisioning overlay:
-   ```sh
-   west build -b nrf7002dk/nrf5340/cpuapp -p -- -DSB_CONFIG_NETCORE_HCI_IPC=y -DEXTRA_CONF_FILE=overlay-ble-prov.conf
+2. **Build and flash:**
+   ```bash
+   west build -b nrf7002dk/nrf5340/cpuapp -p
    west flash --erase
    ```
 
-2. Install the **nRF Wi-Fi Provisioner** mobile app:
-   - [Android](https://play.google.com/store/apps/details?id=no.nordicsemi.android.wifi.provisioning)
-   - [iOS](https://apps.apple.com/app/nrf-wi-fi-provisioner/id1638948698)
-
-3. Provision WiFi credentials:
+3. **Provision WiFi** using the nRF Wi-Fi Provisioner mobile app:
+   - [Android](https://play.google.com/store/apps/details?id=no.nordicsemi.android.wifi.provisioning) | [iOS](https://apps.apple.com/app/nrf-wi-fi-provisioner/id1638948698)
    - Open the app and scan for BLE devices
    - Connect to device named `PV<MAC>` (e.g., `PV006EB1`)
    - Scan for available WiFi networks
    - Select your network and enter the password
    - Provision the credentials
 
-4. The device will automatically:
-   - Connect to the configured WiFi network
-   - Reconnect automatically after power cycle using stored credentials
-   - Update BLE advertisement with connection status (provisioned, connected, RSSI)
+4. **Features enabled:**
+   - ✅ Wireless WiFi provisioning (no USB/shell needed)
+   - ✅ Automatic reconnection after power cycles
+   - ✅ Re-provisioning support for network changes
+   - ✅ Connection status in BLE advertisements
+   - ✅ Memfault crash reporting, metrics, and OTA updates
 
 5. **Re-provisioning to a different WiFi network:**
    - The device supports changing to a different WiFi network without erasing flash
@@ -459,56 +486,31 @@ The BLE provisioning feature allows you to configure WiFi credentials wirelessly
    - The device will disconnect from the current network and connect to the new one
    - **Note:** After re-provisioning, you may need to wait ~10 seconds for the connection to establish
 
-### Option 3: Building with HTTPS Client Requests
-
-The HTTPS client feature enables periodic HTTPS HEAD requests to test network connectivity and demonstrate HTTPS functionality:
-
-1. Build with the HTTPS client overlay:
-   ```sh
-   west build -b nrf7002dk/nrf5340/cpuapp -p -- -DEXTRA_CONF_FILE="overlay-https-req.conf"
-   west flash --erase
+6. **Expected behavior:**
+   ```
+   [00:00:05.123] <inf> ble_prov: BLE advertising started as 'PV006EB1'
+   [00:00:15.456] <inf> ble_prov: WiFi provisioned: SSID=MyNetwork
+   [00:00:18.789] <inf> wpa_supp: Connected to MyNetwork
+   [00:00:19.012] <inf> memfault: Posting data to Memfault cloud...
    ```
 
-2. Configure WiFi credentials using shell commands (or combine with BLE provisioning overlay):
-   ```
-   uart:~$ wifi cred add -s YOURSSID -k 1 -p YOURPASSWORD
-   uart:~$ wifi cred auto_connect
-   ```
+### Option 2: BLE + HTTPS Client
 
-3. The device will automatically:
-   - Send periodic HTTPS HEAD requests to `example.com` (configurable via `CONFIG_HTTPS_HOSTNAME`)
-   - Display request/response information in logs
-   - Operate on a 10-second interval (configurable via `CONFIG_HTTPS_REQUEST_INTERVAL_SEC`)
+Adds periodic HTTPS connectivity testing to the default build:
 
-4. **Customization options:**
-   - Edit `overlay-https-req.conf` to change the target hostname
-   - Adjust request interval by modifying `CONFIG_HTTPS_REQUEST_INTERVAL_SEC`
-   - Combine with ble overlays: `-DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf"`
-
-### Option 4: (BLE + HTTPS - Recommended)
-
-**Best for production deployments** - combines wireless provisioning with connectivity monitoring:
-
-1. **Build with both overlays:**
+1. **Build with HTTPS overlay:**
    ```bash
    west build -b nrf7002dk/nrf5340/cpuapp -p -- \
-     -DSB_CONFIG_NETCORE_HCI_IPC=y \
-     -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf"
+     -DEXTRA_CONF_FILE="overlay-https-req.conf"
    west flash --erase
    ```
 
-2. **Provision WiFi** via the nRF Wi-Fi Provisioner mobile app:
-   - [Android](https://play.google.com/store/apps/details?id=no.nordicsemi.android.wifi.provisioning) | [iOS](https://apps.apple.com/app/nrf-wi-fi-provisioner/id1638948698)
-   - Scan and connect to device `PV<MAC>` (e.g., `PV006EB1`)
-   - Select WiFi network and enter password
-   - Device connects automatically
+2. **Provision WiFi** via the nRF Wi-Fi Provisioner mobile app (same as Option 1)
 
-3. **Features enabled:**
-   - ✅ Wireless WiFi provisioning (no USB/shell needed)
-   - ✅ Periodic HTTPS requests to `example.com` (every 60 seconds)
-   - ✅ Automatic reconnection after power cycles
-   - ✅ Re-provisioning support for network changes
-   - ✅ Connection status in BLE advertisements
+3. **Additional features:**
+   - ✅ All Option 1 features
+   - ✅ Periodic HTTPS HEAD requests to `example.com` (every 60 seconds)
+   - ✅ Network connectivity monitoring
 
 4. **Expected behavior:**
    ```
@@ -519,20 +521,23 @@ The HTTPS client feature enables periodic HTTPS HEAD requests to test network co
    [00:00:19.234] <inf> https_client: HTTP/1.1 200 OK
    ```
 
-### Option 5: Full Features + nRF70 FW Stats CDR (WiFi Diagnostics)
+5. **Customization options:**
+   - Edit `overlay-https-req.conf` to change the target hostname
+   - Adjust request interval by modifying `CONFIG_HTTPS_REQUEST_INTERVAL_SEC`
+
+### Option 3: BLE + HTTPS + nRF70 FW Stats CDR (WiFi Diagnostics)
 
 **For advanced WiFi diagnostics** - adds nRF70 firmware statistics collection for debugging connectivity issues:
 
 1. **Build with all overlays:**
    ```bash
    west build -b nrf7002dk/nrf5340/cpuapp -p -- \
-     -DSB_CONFIG_NETCORE_HCI_IPC=y \
-     -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf;overlay-nrf70-fw-stats-cdr.conf"
+     -DEXTRA_CONF_FILE="overlay-https-req.conf;overlay-nrf70-fw-stats-cdr.conf"
    west flash --erase
    ```
 
 2. **Features enabled:**
-   - ✅ All Option 4 features (BLE provisioning, HTTPS client)
+   - ✅ All Option 2 features (BLE provisioning, HTTPS client)
    - ✅ nRF70 firmware statistics collection (PHY, LMAC, UMAC)
    - ✅ CDR upload to Memfault cloud (ON-DEMAND only, no per-packet overhead)
 
@@ -602,9 +607,7 @@ Complete workflow for pushing firmware updates:
 
 2. **Build new firmware:**
    ```bash
-   west build -b nrf7002dk/nrf5340/cpuapp -p -- \
-     -DSB_CONFIG_NETCORE_HCI_IPC=y \
-     -DEXTRA_CONF_FILE="overlay-ble-prov.conf;overlay-https-req.conf"
+   west build -b nrf7002dk/nrf5340/cpuapp -p
    ```
 
 3. **Upload artifacts to Memfault:**
@@ -674,7 +677,7 @@ The firmware automatically checks for updates in these scenarios:
 > **Note:** All triggers use the shared Memfault FOTA client. Concurrent requests are coalesced.
 
 
-4. **Re-provision via BLE** if using BLE provisioning overlay
+4. **Re-provision via BLE** using the nRF Wi-Fi Provisioner mobile app
 
 
 
@@ -715,6 +718,6 @@ This project is based on Nordic Semiconductor's Memfault sample and follows the 
 
 ## Acknowledgments
 
-This project is based on Nordic Semiconductor's Memfault sample and incorporates enhancements for production IoT deployments.
+This project is based on Nordic Semiconductor's Memfault sample and incorporates enhancements for nRF7002DK.
 
 
