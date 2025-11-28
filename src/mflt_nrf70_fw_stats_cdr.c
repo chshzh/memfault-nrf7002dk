@@ -154,7 +154,7 @@ static int collect_nrf70_fw_stats(void)
 
 	fmac_dev_ctx = ctx->rpu_ctx;
 
-	LOG_INF("Collecting nRF70 firmware statistics (direct FMAC API)...");
+	LOG_DBG("Collecting nRF70 firmware statistics (direct FMAC API)...");
 
 	/* Query RPU stats directly - same call as wifi_util.c:nrf_wifi_util_dump_rpu_stats() */
 	memset(&stats, 0, sizeof(struct rpu_sys_op_stats));
@@ -176,7 +176,7 @@ static int collect_nrf70_fw_stats(void)
 	memcpy(s_nrf70_fw_stats_blob, &stats.fw, fw_stats_size);
 	s_nrf70_fw_stats_blob_size = fw_stats_size;
 
-	LOG_INF("Collected %zu bytes of nRF70 FW stats (UMAC+LMAC+PHY)", s_nrf70_fw_stats_blob_size);
+	LOG_DBG("Collected %zu bytes of nRF70 FW stats (UMAC+LMAC+PHY)", s_nrf70_fw_stats_blob_size);
 
 unlock:
 	k_mutex_unlock(&ctx->rpu_lock);

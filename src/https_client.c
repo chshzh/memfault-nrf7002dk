@@ -24,7 +24,7 @@
 #include <modem/modem_key_mgmt.h>
 #endif
 
-LOG_MODULE_REGISTER(https_client, CONFIG_HTTPS_CLIENT_LOG_LEVEL);
+LOG_MODULE_REGISTER(https_client_app, CONFIG_HTTPS_CLIENT_LOG_LEVEL);
 
 #define HTTPS_PORT "443"
 #define HTTP_HEAD                                                                                  \

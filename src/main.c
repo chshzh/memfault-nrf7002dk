@@ -29,7 +29,8 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
 
-#if CONFIG_MEMFAULT_NCS_STACK_METRICS
+#if CONFIG_MEMFAULT_NCS_STACK_METRICS 
+#include <memfault_ncs_metrics.h>
 #include "mflt_stack_metrics.h"
 #endif
 
@@ -77,8 +78,10 @@ static int fib(int n)
 
 void memfault_metrics_heartbeat_collect_data(void)
 {
+#if CONFIG_MEMFAULT_NCS_STACK_METRICS  
 	/* Maintain default NCS metrics collection (stack, connectivity, etc.) */
 	memfault_ncs_metrics_collect_data();
+#endif
 
 	/* Append custom Wi-Fi metrics */
 	mflt_wifi_metrics_collect();
@@ -115,7 +118,6 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 				 * Enable Developer Mode in Memfault dashboard for higher limits
 				 * during testing.
 				 */
-				LOG_WRN("Collecting nRF70 FW stats CDR (limited to 1/24h)...");
 				int cdr_err = mflt_nrf70_fw_stats_cdr_collect();
 				if (cdr_err) {
 					LOG_WRN("nRF70 FW stats CDR collection failed: %d",
