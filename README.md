@@ -431,6 +431,17 @@ Note about Memfault storage usage
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+### Network Core (hci_ipc) Memory Map
+
+The nRF5340 network core runs the BLE controller (`hci_ipc`) for BLE provisioning.
+
+| Memory Region | Used | Total | Usage |
+|---------------|------|-------|-------|
+| **FLASH** | 151.9 KB | 256 KB | 57.95% |
+| **RAM** | 38.9 KB | 64 KB | 59.35% |
+
+> **Note:** The largest RAM consumer is the BLE Controller Memory Pool (`sdc_mempool`: 15.9 KB), which can be reduced by lowering `CONFIG_BT_MAX_CONN`.
+
 ## Building Firmware
 
 ### Prerequisites
