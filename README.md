@@ -81,28 +81,41 @@ memfault-nrf7002dk/
 
 The project uses Memfault SDK v1.31.0 (newer than NCS v3.1.1 default v1.26.0).
 
-To change SDK version:
+**How to Update to a Different Version:**
 
-1. **Edit NCS manifest** at `<ncs_root>/nrf/west.yml`:
-   ```yaml
-   - name: memfault-firmware-sdk
-     path: modules/lib/memfault-firmware-sdk
-     revision: 1.31.0  # Change this
-     remote: memfault
+1. **Navigate to Memfault SDK directory:**
+   ```bash
+   cd /opt/nordic/ncs/v3.1.1/modules/lib/memfault-firmware-sdk
    ```
 
-2. **Update modules:**
+2. **Fetch latest tags and checkout desired version:**
    ```bash
-   cd /opt/nordic/ncs/v3.1.1
-   west update
+   git pull
+   git checkout 1.31.0  # Or any available tag (1.30.0, 1.29.0, etc.)
    ```
 
-3. **Verify update:**
+3. **Verify version:**
    ```bash
-   cd modules/lib/memfault-firmware-sdk
    git log --oneline -1
    # Should show: 050c1a5 Memfault Firmware SDK 1.31.0 (Build 15800)
    ```
+
+4. **List available versions:**
+   ```bash
+   git tag | grep -E '^1\.[0-9]+\.[0-9]+$' | sort -V | tail -10
+   ```
+
+**After Updating:**
+
+1. **Clean rebuild** your project to pick up SDK changes:
+   ```bash
+   cd /opt/nordic/ncs/myApps/memfault-nrf7002dk
+   west build -b nrf7002dk/nrf5340/cpuapp -p
+   ```
+
+2. **Upload new symbol file** to Memfault dashboard:
+   - File: `build/memfault-nrf7002dk/zephyr/zephyr.elf`
+   - Navigate to **Fleet** → **Symbol Files** → Upload
 
 ### Custom Partition Layout
 
@@ -154,14 +167,41 @@ See `components/include/memfault/core/platform/nonvolatile_event_storage.h`
 
 This feature enables collection and upload of nRF70 WiFi firmware statistics (PHY, LMAC, UMAC) to Memfault cloud using the [Custom Data Recording (CDR)](https://docs.memfault.com/docs/mcu/custom-data-recording) feature. This is valuable for diagnosing WiFi connectivity issues in production deployments.
 
-#### Implementation
+#### Prerequisites
 
-This implementation uses the **direct FMAC API** (`nrf_wifi_sys_fmac_stats_get`) like the driver's `wifi_util.c` does. This provides:
+This feature requires a modified Zephyr with vendor statistics support. You need to use the `mf_stats_311` branch from the Nordic fork:
 
-- ✅ **ON-DEMAND collection only** - No per-packet polling overhead
-- ✅ **No extra Kconfig needed** - Works with standard NCS v3.1.1
-- ✅ **Clean logs** - No "Stats request already pending" errors
-- ✅ **Single ~50ms blocking call** per collection request
+1. **Navigate to Zephyr directory:**
+   ```bash
+   cd /opt/nordic/ncs/v3.1.1/zephyr
+   ```
+
+2. **Add the remote and checkout the stats branch:**
+   ```bash
+   # NCS toolchain git (2.37.3) is too old for modern GitHub repos
+   # Use system git (2.50.1) with explicit GIT_EXEC_PATH
+   
+   # Add the krish2718 remote (only need to do this once)
+   git remote add krish2718 https://github.com/krish2718/sdk-zephyr.git
+   
+   # Fetch and checkout using system git helpers
+   GIT_EXEC_PATH="/Library/Developer/CommandLineTools/usr/libexec/git-core" \
+     /usr/bin/git fetch krish2718 mf_stats_311
+   
+   git checkout FETCH_HEAD
+   ```
+
+3. **Verify the branch:**
+   ```bash
+   git log --oneline -1
+   # Should show the latest commit from mf_stats_311 branch
+   ```
+
+4. **To switch back to original NCS Zephyr:**
+   ```bash
+   cd /opt/nordic/ncs/v3.1.1/zephyr
+   git checkout v4.1.99-ncs1
+   ```
 
 #### Building with CDR Support
 
