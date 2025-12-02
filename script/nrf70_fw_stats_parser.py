@@ -266,24 +266,24 @@ def main():
         print(f"Error: Header file '{args.header_file}' not found")
         sys.exit(1)
     
-    # Check if blob is a file
-    if os.path.isfile(args.blob):
+    # Check if hex_blob is a file
+    if os.path.isfile(args.hex_blob):
         try:
-            with open(args.blob, 'rb') as f:
+            with open(args.hex_blob, 'rb') as f:
                 blob_data = f.read()
-            logging.debug(f"Read {len(blob_data)} bytes from file '{args.blob}'")
+            logging.debug(f"Read {len(blob_data)} bytes from file '{args.hex_blob}'")
         except Exception as e:
-            print(f"Error reading file '{args.blob}': {e}")
+            print(f"Error reading file '{args.hex_blob}': {e}")
             sys.exit(1)
     else:
         # Assume it's a hex string
         try:
             # Remove potential whitespace and 0x prefix
-            clean_hex = args.blob.replace(' ', '').replace('0x', '').replace('\n', '')
+            clean_hex = args.hex_blob.replace(' ', '').replace('0x', '').replace('\n', '')
             blob_data = bytes.fromhex(clean_hex)
             logging.debug(f"Parsed {len(blob_data)} bytes from hex string")
         except ValueError:
-            print(f"Error: Argument '{args.blob}' is neither a valid file path nor a valid hex string.")
+            print(f"Error: Argument '{args.hex_blob}' is neither a valid file path nor a valid hex string.")
             sys.exit(1)
     
     # Parse using header file
