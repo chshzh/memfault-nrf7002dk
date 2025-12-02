@@ -18,6 +18,7 @@
 #include <memfault/core/log.h>
 #include <memfault/core/trace_event.h>
 #include <memfault/panics/coredump.h>
+#include <memfault/metrics/connectivity.h>
 #include <memfault_ncs.h>
 #include <dk_buttons_and_leds.h>
 #include "mflt_wifi_metrics.h"
@@ -29,7 +30,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
 
-#if CONFIG_MEMFAULT_NCS_STACK_METRICS 
+#if CONFIG_MEMFAULT_NCS_STACK_METRICS
 #include <memfault_ncs_metrics.h>
 #include "mflt_stack_metrics.h"
 #endif
@@ -78,7 +79,7 @@ static int fib(int n)
 
 void memfault_metrics_heartbeat_collect_data(void)
 {
-#if CONFIG_MEMFAULT_NCS_STACK_METRICS  
+#if CONFIG_MEMFAULT_NCS_STACK_METRICS
 	/* Maintain default NCS metrics collection (stack, connectivity, etc.) */
 	memfault_ncs_metrics_collect_data();
 #endif
@@ -112,12 +113,6 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 			if (wifi_connected) {
 				memfault_metrics_heartbeat_debug_trigger();
 #ifdef CONFIG_NRF70_FW_STATS_CDR_ENABLED
-				/* Collect nRF70 FW stats for CDR upload.
-				 * WARNING: Memfault CDR is limited to 1 upload per device per 24
-				 * hours! This is the ONLY place where CDR collection is triggered.
-				 * Enable Developer Mode in Memfault dashboard for higher limits
-				 * during testing.
-				 */
 				int cdr_err = mflt_nrf70_fw_stats_cdr_collect();
 				if (cdr_err) {
 					LOG_WRN("nRF70 FW stats CDR collection failed: %d",
@@ -223,6 +218,10 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 		LOG_INF("Network connectivity established");
 		wifi_connected = true;
 
+		/* Signal connectivity state change to Memfault */
+		memfault_metrics_connectivity_connected_state_change(
+			kMemfaultMetricsConnectivityState_Connected);
+
 		/* Initialize stack metrics monitoring */
 #if CONFIG_MEMFAULT_NCS_STACK_METRICS
 		mflt_stack_metrics_init();
@@ -245,6 +244,10 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 	case NET_EVENT_L4_DISCONNECTED:
 		LOG_INF("Network connectivity lost");
 		wifi_connected = false;
+
+		/* Signal connectivity state change to Memfault */
+		memfault_metrics_connectivity_connected_state_change(
+			kMemfaultMetricsConnectivityState_ConnectionLost);
 
 		/* Update BLE advertisement with WiFi disconnected status */
 #ifdef CONFIG_BLE_PROV_ENABLED
@@ -331,6 +334,10 @@ int main(void)
 	/* Setup handler for Zephyr NET Connection Manager Connectivity layer. */
 	net_mgmt_init_event_callback(&conn_cb, connectivity_event_handler, CONN_LAYER_EVENT_MASK);
 	net_mgmt_add_event_callback(&conn_cb);
+
+	/* Signal to Memfault that we're starting connectivity (attempting to connect) */
+	memfault_metrics_connectivity_connected_state_change(
+		kMemfaultMetricsConnectivityState_Started);
 
 #ifdef CONFIG_HTTPS_CLIENT_ENABLED
 	/* Initialize HTTPS client */
