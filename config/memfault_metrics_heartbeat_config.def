@@ -4,12 +4,6 @@
 
 MEMFAULT_METRICS_KEY_DEFINE(switch_1_toggle_count, kMemfaultMetricType_Unsigned)
 
-/* Custom WiFi metrics for periodic monitoring */
-MEMFAULT_METRICS_KEY_DEFINE(ncs_wifi_rssi, kMemfaultMetricType_Signed)
-MEMFAULT_METRICS_KEY_DEFINE(ncs_wifi_channel, kMemfaultMetricType_Unsigned)
-MEMFAULT_METRICS_KEY_DEFINE(ncs_wifi_link_mode, kMemfaultMetricType_Unsigned)
-MEMFAULT_METRICS_KEY_DEFINE(ncs_wifi_tx_rate_mbps, kMemfaultMetricType_Unsigned)
-
 /* WiFi stack thread metrics - stack usage monitoring */
 MEMFAULT_METRICS_KEY_DEFINE(ncs_wifi_hostap_iface_unused_stack, kMemfaultMetricType_Unsigned)
 MEMFAULT_METRICS_KEY_DEFINE(ncs_wifi_hostap_handler_unused_stack, kMemfaultMetricType_Unsigned)
