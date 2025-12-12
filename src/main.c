@@ -210,10 +210,10 @@ static void on_connect(void)
 	memfault_zephyr_port_post_data();
 }
 
-static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
+static void l4_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
 			     struct net_if *iface)
 {
-	switch (event) {
+	switch (mgmt_event) {
 	case NET_EVENT_L4_CONNECTED:
 		LOG_INF("Network connectivity established");
 		wifi_connected = true;
@@ -260,15 +260,15 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 #endif
 		break;
 	default:
-		LOG_DBG("Unknown event: 0x%08X", event);
+		LOG_DBG("Unknown event: 0x%016llX", mgmt_event);
 		return;
 	}
 }
 
-static void connectivity_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
+static void connectivity_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
 				       struct net_if *iface)
 {
-	switch (event) {
+	switch (mgmt_event) {
 	case NET_EVENT_CONN_IF_FATAL_ERROR:
 		LOG_ERR("Connectivity fatal error, scheduling reconnect");
 		wifi_connected = false;

@@ -6,8 +6,8 @@ A comprehensive Memfault integration sample for Nordic nRF7002DK, demonstrating 
 
 This sample application showcases:
 - **Platform**: nRF7002DK (nRF5340 + nRF7002 WiFi companion chip)
-- **SDK**: nRF Connect SDK v3.1.1v3.1.1 (requires a special Zephyr branch - see Prerequisites)
-- **Memfault SDK**: v1.31.0 (upgraded from default v1.26.0)
+- **SDK**: nRF Connect SDK v3.2.0
+- **Memfault SDK**: v1.32.0 (default in NCS v3.2.0)
 
 ### Key Features
 
@@ -32,32 +32,19 @@ This sample application showcases:
 
 ## Prerequisites
 
-### 1. Memfault SDK v1.31.0
+### 1. Memfault SDK v1.32.0
 
-This project uses Memfault SDK v1.31.0 (default NCS v3.1.1 is v1.26.0):
+This project uses Memfault SDK v1.32.0 (default in NCS v3.2.0).
+
+> ✅ **No manual update needed** - NCS v3.2.0 includes Memfault SDK v1.32.0 by default.
+You may update it to a new version with following commands.
 
 ```bash
-cd /opt/nordic/ncs/v3.1.1/modules/lib/memfault-firmware-sdk
+cd /opt/nordic/ncs/v3.2.0/modules/lib/memfault-firmware-sdk
 git pull
-git checkout 1.31.0
+git checkout 1.3x.0
 ```
 
-### 2. Zephyr with Vendor Statistics Support
-
-The nRF70 WiFi firmware statistics feature requires a modified Zephyr (will be merged into Zephyr main branch soon):
-
-```bash
-cd /opt/nordic/ncs/v3.1.1/zephyr
-
-# Add remote (only needed once)
-git remote add krish2718 https://github.com/krish2718/sdk-zephyr.git
-
-# Fetch and checkout stats branch
-git fetch krish2718 mf_stats_311
-git checkout FETCH_HEAD
-```
-
-After updating, rebuild and upload new symbol file.
 
 ## Quick Start
 
@@ -166,17 +153,17 @@ This project uses a custom partition layout optimized for Memfault operation and
 │                    nRF5340 Internal Flash (1MB)                │
 ├────────────────────────────────────────────────────────────────┤
 │ 0x00000 ┌─────────────────────────────────────┐                │
-│         │            mcuboot                  │ 32KB           │
-│         │          (Bootloader)               │ (0x8000)       │
-│ 0x08000 ├─────────────────────────────────────┤                │
+│         │            mcuboot                  │ 40KB           │
+│         │          (Bootloader)               │ (0xA000)       │
+│ 0x0A000 ├─────────────────────────────────────┤                │
 │         │        mcuboot_pad                  │ 512B           │
-│ 0x08200 ├─────────────────────────────────────┤ (0x200)        │
+│ 0x0A200 ├─────────────────────────────────────┤ (0x200)        │
 │         │                                     │                │
 │         │                                     │                │
 │         │                                     │                │
 │         │                                     │                │
-│         │              app                    │ 919KB          │
-│         │        (Main Application)           │ (0xE5E00)      │
+│         │              app                    │ 911KB          │
+│         │        (Main Application)           │ (0xE3E00)      │
 │         │                                     │                │
 │         │                                     │                │
 │         │                                     │                │
@@ -203,17 +190,17 @@ This project uses a custom partition layout optimized for Memfault operation and
 │         │                                     │                │
 │         │                                     │                │
 │         │                                     │                │
-│         │        mcuboot_secondary            │ 919KB          │
-│         │      (App Update Slot)              │ (0xE6000)      │
+│         │        mcuboot_secondary            │ 911KB          │
+│         │      (App Update Slot)              │ (0xE4000)      │
 │         │                                     │                │
 │         │                                     │                │
-│ 0xE6000 ├─────────────────────────────────────┤                │
+│ 0xE4000 ├─────────────────────────────────────┤                │
 │         │                                     │                │
 │         │                                     │                │
 │         │                                     │                │
 │         │                                     │                │
 │         │         external_flash              │ 7.1MB+         │
-│         │         (Reserved, Unused)          │ (0x71A000)     │
+│         │         (Reserved, Unused)          │ (0x71C000)     │
 │         │                                     │                │
 │         │    ⚠️  Currently not used by the    │                │
 │         │       sample application.           │                │
@@ -354,7 +341,7 @@ Download CDR blob from Memfault and parse:
 
 ```bash
 python3 script/nrf70_fw_stats_parser.py \
-  /opt/nordic/ncs/v3.1.1/modules/lib/nrf_wifi/fw_if/umac_if/inc/fw/host_rpu_sys_if.h \
+  /opt/nordic/ncs/v3.2.0/modules/lib/nrf_wifi/fw_if/umac_if/inc/fw/host_rpu_sys_if.h \
   ~/Downloads/F4CE36006EB1_nrf70-fw-stats_20251128-111955.bin
 ```
 

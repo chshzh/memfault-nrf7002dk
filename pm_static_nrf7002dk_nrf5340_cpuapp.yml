@@ -1,27 +1,27 @@
 mcuboot:
   address: 0x0
-  size: 0x8000
+  size: 0xa000
   region: flash_primary
 mcuboot_pad:
-  address: 0x8000
+  address: 0xa000
   size: 0x200
 app:
-  address: 0x8200
-  size: 0xe5e00
+  address: 0xa200
+  size: 0xe3e00
 mcuboot_primary:
   orig_span: &id001
   - mcuboot_pad
   - app
   span: *id001
-  address: 0x8000
-  size: 0xe6000
+  address: 0xa000
+  size: 0xe4000
   region: flash_primary
 mcuboot_primary_app:
   orig_span: &id002
   - app
   span: *id002
-  address: 0x8200
-  size: 0xe5e00
+  address: 0xa200
+  size: 0xe3e00
 settings_storage:
   address: 0xee000
   size: 0x2000
@@ -32,12 +32,12 @@ memfault_storage:
   region: flash_primary
 mcuboot_secondary:
   address: 0x0
-  size: 0xe6000
+  size: 0xe4000
   device: MX25R64
   region: external_flash
 external_flash:
-  address: 0xe6000
-  size: 0x71a000
+  address: 0xe4000
+  size: 0x71c000
   device: MX25R64
   region: external_flash
 
