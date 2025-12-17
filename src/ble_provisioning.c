@@ -97,8 +97,7 @@ static struct k_work_delayable update_adv_data_work;
 static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
 				    struct net_if *iface)
 {
-	struct wifi_iface_status status = {0};
-	int rc;
+	ARG_UNUSED(iface);
 
 	if (!wifi_prov_state_get()) {
 		return;
@@ -106,9 +105,13 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb, uint64_t
 
 	switch (mgmt_event) {
 	case NET_EVENT_WIFI_DISCONNECT_RESULT:
-		/* Only handle reconnect on actual disconnect event */
-		rc = net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &status, sizeof(status));
-		if (rc == 0 && status.state < WIFI_STATE_ASSOCIATED && !wifi_reconnect_pending) {
+		/* Skip reconnect if BLE client is connected (provisioning in progress) */
+		if (current_conn != NULL) {
+			LOG_INF("BLE client connected, skipping WiFi auto-reconnect");
+			break;
+		}
+		/* Schedule reconnect only if not already pending */
+		if (!wifi_reconnect_pending) {
 			wifi_reconnect_pending = true;
 			k_work_reschedule(&wifi_connect_work, K_SECONDS(WIFI_RECONNECT_DELAY_SEC));
 			LOG_INF("WiFi disconnected, scheduling reconnect");
@@ -127,6 +130,13 @@ static void wifi_connect_work_handler(struct k_work *work)
 {
 	int err;
 	struct net_if *iface = net_if_get_default();
+
+	/* Skip reconnect if BLE client is connected (provisioning in progress) */
+	if (current_conn != NULL) {
+		LOG_INF("BLE client connected, skipping WiFi reconnect attempt");
+		wifi_reconnect_pending = false;
+		return;
+	}
 
 	/* Check if credentials are now available (they were just provisioned) */
 	if (!wifi_credentials_is_empty()) {
@@ -237,7 +247,9 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
 	k_work_reschedule_for_queue(&adv_daemon_work_q, &update_adv_param_work,
 				    K_SECONDS(ADV_PARAM_UPDATE_DELAY));
-	k_work_reschedule_for_queue(&adv_daemon_work_q, &update_adv_data_work, K_NO_WAIT);
+	/* Delay ad data update until after advertising restarts to avoid EAGAIN (-11) */
+	k_work_reschedule_for_queue(&adv_daemon_work_q, &update_adv_data_work,
+				    K_SECONDS(ADV_PARAM_UPDATE_DELAY + 1));
 }
 
 static void identity_resolved(struct bt_conn *conn, const bt_addr_le_t *rpa,
@@ -324,8 +336,10 @@ static void update_adv_data_task(struct k_work *item)
 	}
 
 	rc = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-	if (rc != 0) {
+	if (rc != 0 && rc != -EAGAIN) {
 		LOG_ERR("Cannot update advertisement data, err = %d", rc);
+	} else if (rc == -EAGAIN) {
+		LOG_DBG("Advertisement update deferred, advertising not active");
 	}
 #ifdef CONFIG_WIFI_PROV_ADV_DATA_UPDATE
 	k_work_reschedule_for_queue(&adv_daemon_work_q, &update_adv_data_work,

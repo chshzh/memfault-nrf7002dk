@@ -367,18 +367,18 @@ int main(void)
 		LOG_ERR("conn_mgr_all_if_up, error: %d", err);
 	}
 
+	/* Initialize BLE provisioning so re-provisioning is always available */
+	err = ble_prov_init();
+	if (err) {
+		LOG_ERR("BLE provisioning initialization failed: %d", err);
+	} else {
+		LOG_INF("BLE provisioning initialized successfully");
+	}
+
 	/* Check if WiFi credentials are stored before attempting connection */
 	if (wifi_credentials_is_empty()) {
 		LOG_INF("No stored WiFi credentials found");
 		LOG_INF("Please provision WiFi credentials using BLE");
-
-		/* Initialize BLE provisioning */
-		err = ble_prov_init();
-		if (err) {
-			LOG_ERR("BLE provisioning initialization failed: %d", err);
-		} else {
-			LOG_INF("BLE provisioning initialized successfully");
-		}
 	} else {
 		LOG_INF("Attempting to connect to stored WiFi network");
 
