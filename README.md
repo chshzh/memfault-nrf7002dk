@@ -90,7 +90,7 @@ memfault-nrf7002dk/
 ├── boards/
 │   └── nrf7002dk_nrf5340_cpuapp.conf # Board-specific config
 ├── cert/
-│   └── DigiCertGlobalG3.pem         # Root CA for HTTPS
+│   └── SSLcom-TLS-Root-2022-ECC.pem         # Root CA for HTTPS
 ├── config/
 │   └── memfault_metrics_heartbeat_config.def  # Metric definitions
 ├── sysbuild/                         # Multi-image build configs

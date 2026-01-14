@@ -48,7 +48,7 @@ static bool network_ready = false;
 
 /* Certificate for hostname */
 static const char cert[] = {
-#include "DigiCertGlobalG3.pem.inc"
+#include "SSLcom-TLS-Root-2022-ECC.pem.inc"
 
 	/* Null terminate certificate if running Mbed TLS on the application core.
 	 * Required by TLS credentials API.
