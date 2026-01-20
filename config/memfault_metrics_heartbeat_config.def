@@ -23,3 +23,9 @@ MEMFAULT_METRICS_KEY_DEFINE(ncs_tcp_work_unused_stack, kMemfaultMetricType_Unsig
 MEMFAULT_METRICS_KEY_DEFINE(ncs_shell_uart_unused_stack, kMemfaultMetricType_Unsigned)
 MEMFAULT_METRICS_KEY_DEFINE(ncs_logging_unused_stack, kMemfaultMetricType_Unsigned)
 MEMFAULT_METRICS_KEY_DEFINE(ncs_main_unused_stack, kMemfaultMetricType_Unsigned)
+
+/* Application protocol metrics - HTTPS and MQTT statistics */
+MEMFAULT_METRICS_KEY_DEFINE(https_req_total_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(https_req_fail_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(mqtt_loop_total_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(mqtt_loop_fail_count, kMemfaultMetricType_Unsigned)

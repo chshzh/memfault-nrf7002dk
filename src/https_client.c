@@ -12,6 +12,7 @@
 #include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
 #include <zephyr/logging/log.h>
+#include <memfault/metrics/metrics.h>
 
 #if defined(CONFIG_POSIX_API)
 #include <zephyr/posix/arpa/inet.h>
@@ -173,18 +174,23 @@ static void send_http_request(void)
 		.ai_socktype = SOCK_STREAM,
 	};
 	char peer_addr[INET6_ADDRSTRLEN];
+	bool request_failed = false;
 
 	if (!network_ready) {
 		LOG_WRN("Network not ready, skipping HTTPS request");
 		return;
 	}
 
+	/* Increment total request count */
+	MEMFAULT_METRIC_ADD(https_req_total_count, 1);
+
 	LOG_INF("Looking up %s", CONFIG_HTTPS_HOSTNAME);
 
 	err = getaddrinfo(CONFIG_HTTPS_HOSTNAME, HTTPS_PORT, &hints, &res);
 	if (err) {
 		LOG_ERR("getaddrinfo() failed, err %d", errno);
-		return;
+		request_failed = true;
+		goto clean_up;
 	}
 
 	inet_ntop(res->ai_family, &((struct sockaddr_in *)(res->ai_addr))->sin_addr, peer_addr,
@@ -197,7 +203,7 @@ static void send_http_request(void)
 		fd = socket(res->ai_family, SOCK_STREAM, IPPROTO_TLS_1_2);
 	}
 	if (fd == -1) {
-		LOG_ERR("Failed to open socket!");
+		request_failed = true;
 		goto clean_up;
 	}
 
@@ -205,6 +211,7 @@ static void send_http_request(void)
 	err = tls_setup(fd);
 	if (err) {
 		LOG_ERR("TLS setup failed");
+		request_failed = true;
 		goto clean_up;
 	}
 
@@ -213,6 +220,7 @@ static void send_http_request(void)
 	err = connect(fd, res->ai_addr, res->ai_addrlen);
 	if (err) {
 		LOG_ERR("connect() failed, err: %d", errno);
+		request_failed = true;
 		goto clean_up;
 	}
 
@@ -221,6 +229,7 @@ static void send_http_request(void)
 		bytes = send(fd, &send_buf[off], HTTP_HEAD_LEN - off, 0);
 		if (bytes < 0) {
 			LOG_ERR("send() failed, err %d", errno);
+			request_failed = true;
 			goto clean_up;
 		}
 		off += bytes;
@@ -233,6 +242,7 @@ static void send_http_request(void)
 		bytes = recv(fd, &recv_buf[off], RECV_BUF_SIZE - off, 0);
 		if (bytes < 0) {
 			LOG_ERR("recv() failed, err %d", errno);
+			request_failed = true;
 			goto clean_up;
 		}
 		off += bytes;
@@ -258,6 +268,9 @@ static void send_http_request(void)
 	LOG_DBG("Finished, closing socket");
 
 clean_up:
+	if (request_failed) {
+		MEMFAULT_METRIC_ADD(https_req_fail_count, 1);
+	}
 	if (res) {
 		freeaddrinfo(res);
 	}
@@ -302,7 +315,13 @@ static void https_client_thread(void *arg1, void *arg2, void *arg3)
 			HTTPS_REQUEST_INTERVAL_SEC);
 
 		k_sleep(K_SECONDS(3));
-		/* Send periodic HTTPS requests while network is available */
+		/* SLog Memfault metrics */
+		int32_t total = 0, failures = 0;
+		memfault_metrics_heartbeat_read_unsigned(
+			MEMFAULT_METRICS_KEY(https_req_total_count), (uint32_t *)&total);
+		memfault_metrics_heartbeat_read_unsigned(MEMFAULT_METRICS_KEY(https_req_fail_count),
+							 (uint32_t *)&failures);
+		LOG_INF("HTTPS Request Test Metrics - Total: %d, Failures: %d", total, failures);
 		while (https_client_running && network_ready) {
 			send_http_request();
 			LOG_INF("HTTP request count: %d", http_request_count++);

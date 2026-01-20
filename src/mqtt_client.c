@@ -10,6 +10,7 @@
 #include <zephyr/logging/log.h>
 #include <net/mqtt_helper.h>
 #include <hw_id.h>
+#include <memfault/metrics/metrics.h>
 
 LOG_MODULE_REGISTER(mqtt_client, CONFIG_MQTT_CLIENT_LOG_LEVEL);
 
@@ -36,6 +37,7 @@ static struct k_work_q mqtt_workq;
 static enum app_mqtt_client_state current_state = APP_MQTT_STATE_DISCONNECTED;
 static bool network_ready;
 static uint32_t message_count;
+static char last_published_msg[32]; /* Track last published message for validation */
 
 /* Client ID and topic buffers */
 static char client_id[CONFIG_MQTT_CLIENT_ID_BUFFER_SIZE];
@@ -99,8 +101,35 @@ static void on_mqtt_disconnect(int result)
 
 static void on_mqtt_publish(struct mqtt_helper_buf topic, struct mqtt_helper_buf payload)
 {
+	char received_msg[32];
+	size_t copy_len = MIN(payload.size, sizeof(received_msg) - 1);
+	memcpy(received_msg, payload.ptr, copy_len);
+	received_msg[copy_len] = '\0';
+
 	LOG_INF("Received payload: %.*s on topic: %.*s", payload.size, payload.ptr, topic.size,
 		topic.ptr);
+
+	/* Validate loopback: check if received matches published */
+	if (last_published_msg[0] != '\0') {
+		if (strcmp(received_msg, last_published_msg) == 0) {
+			/* Successful loopback */
+			MEMFAULT_METRIC_ADD(mqtt_loop_total_count, 1);
+			LOG_INF("MQTT loopback success: '%s' matched", received_msg);
+		} else {
+			/* Loopback validation failed - mismatch */
+			MEMFAULT_METRIC_ADD(mqtt_loop_fail_count, 1);
+			LOG_ERR("MQTT loopback FAILED: expected '%s', got '%s'", last_published_msg,
+				received_msg);
+		}
+	}
+
+	/* Log Memfault metrics */
+	int32_t total = 0, failures = 0;
+	memfault_metrics_heartbeat_read_unsigned(MEMFAULT_METRICS_KEY(mqtt_loop_total_count),
+						 (uint32_t *)&total);
+	memfault_metrics_heartbeat_read_unsigned(MEMFAULT_METRICS_KEY(mqtt_loop_fail_count),
+						 (uint32_t *)&failures);
+	LOG_INF("MQTT Loop Test Metrics - Total: %d, Failures: %d", total, failures);
 }
 
 static void on_mqtt_suback(uint16_t message_id, int result)
@@ -228,6 +257,10 @@ static void publish_work_fn(struct k_work *work)
 	message_count++;
 	snprintk(payload, sizeof(payload), "%u", message_count);
 
+	/* Save for loopback validation */
+	strncpy(last_published_msg, payload, sizeof(last_published_msg) - 1);
+	last_published_msg[sizeof(last_published_msg) - 1] = '\0';
+
 	struct mqtt_publish_param param = {
 		.message.payload.data = payload,
 		.message.payload.len = strlen(payload),
@@ -240,6 +273,8 @@ static void publish_work_fn(struct k_work *work)
 	err = mqtt_helper_publish(&param);
 	if (err) {
 		LOG_WRN("Failed to publish message: %d", err);
+		/* Increment failure count if publish fails */
+		MEMFAULT_METRIC_ADD(mqtt_loop_fail_count, 1);
 	} else {
 		LOG_INF("Published message: \"%s\" on topic: \"%s\"", payload, pub_topic);
 	}
