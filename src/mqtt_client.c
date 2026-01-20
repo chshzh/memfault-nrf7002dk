@@ -39,7 +39,13 @@ static uint32_t message_count;
 
 /* Client ID and topic buffers */
 static char client_id[CONFIG_MQTT_CLIENT_ID_BUFFER_SIZE];
-static char pub_topic[CONFIG_MQTT_CLIENT_ID_BUFFER_SIZE + sizeof(CONFIG_MQTT_CLIENT_PUBLISH_TOPIC)];
+static char pub_topic[CONFIG_MQTT_CLIENT_ID_BUFFER_SIZE + sizeof(CONFIG_MQTT_CLIENT_PUBLISH_TOPIC) +
+		      16];
+static char sub_topic[CONFIG_MQTT_CLIENT_ID_BUFFER_SIZE + sizeof(CONFIG_MQTT_CLIENT_PUBLISH_TOPIC) +
+		      16];
+
+/* Forward declaration for subscribe */
+static int subscribe_to_topic(void);
 
 /* MQTT helper callbacks */
 static void on_mqtt_connack(enum mqtt_conn_return_code return_code, bool session_present)
@@ -62,6 +68,12 @@ static void on_mqtt_connack(enum mqtt_conn_return_code return_code, bool session
 
 	/* Cancel reconnection attempts */
 	k_work_cancel_delayable(&connect_work);
+
+	/* Subscribe to loopback topic */
+	int err = subscribe_to_topic();
+	if (err) {
+		LOG_WRN("Failed to subscribe: %d", err);
+	}
 
 	/* Start periodic publishing */
 	k_work_reschedule_for_queue(&mqtt_workq, &publish_work,
@@ -87,9 +99,8 @@ static void on_mqtt_disconnect(int result)
 
 static void on_mqtt_publish(struct mqtt_helper_buf topic, struct mqtt_helper_buf payload)
 {
-	LOG_INF("Received payload: %.*s on topic: %.*s",
-		payload.size, payload.ptr,
-		topic.size, topic.ptr);
+	LOG_INF("Received payload: %.*s on topic: %.*s", payload.size, payload.ptr, topic.size,
+		topic.ptr);
 }
 
 static void on_mqtt_suback(uint16_t message_id, int result)
@@ -105,14 +116,50 @@ static int setup_topics(void)
 {
 	int len;
 
-	len = snprintk(pub_topic, sizeof(pub_topic), "Memfault/%s/%s",
-		       client_id, CONFIG_MQTT_CLIENT_PUBLISH_TOPIC);
+	len = snprintk(pub_topic, sizeof(pub_topic), "Memfault/%s/%s", client_id,
+		       CONFIG_MQTT_CLIENT_PUBLISH_TOPIC);
 	if ((len < 0) || (len >= sizeof(pub_topic))) {
 		LOG_ERR("Publish topic buffer too small");
 		return -EMSGSIZE;
 	}
 
+	/* Subscribe to the same topic for loopback */
+	len = snprintk(sub_topic, sizeof(sub_topic), "Memfault/%s/%s", client_id,
+		       CONFIG_MQTT_CLIENT_PUBLISH_TOPIC);
+	if ((len < 0) || (len >= sizeof(sub_topic))) {
+		LOG_ERR("Subscribe topic buffer too small");
+		return -EMSGSIZE;
+	}
+
 	LOG_INF("Publish topic: %s", pub_topic);
+	LOG_INF("Subscribe topic: %s", sub_topic);
+	return 0;
+}
+
+static int subscribe_to_topic(void)
+{
+	int err;
+	struct mqtt_topic topics[] = {
+		{
+			.topic.utf8 = sub_topic,
+			.topic.size = strlen(sub_topic),
+			.qos = MQTT_QOS_1_AT_LEAST_ONCE,
+		},
+	};
+	struct mqtt_subscription_list sub_list = {
+		.list = topics,
+		.list_count = ARRAY_SIZE(topics),
+		.message_id = mqtt_helper_msg_id_get(),
+	};
+
+	LOG_INF("Subscribing to topic: %s", sub_topic);
+
+	err = mqtt_helper_subscribe(&sub_list);
+	if (err) {
+		LOG_ERR("Failed to subscribe: %d", err);
+		return err;
+	}
+
 	return 0;
 }
 
@@ -194,8 +241,7 @@ static void publish_work_fn(struct k_work *work)
 	if (err) {
 		LOG_WRN("Failed to publish message: %d", err);
 	} else {
-		LOG_INF("Published message: \"%s\" on topic: \"%s\"",
-			payload, pub_topic);
+		LOG_INF("Published message: \"%s\" on topic: \"%s\"", payload, pub_topic);
 	}
 
 	/* Schedule next publish */
@@ -211,18 +257,18 @@ int app_mqtt_client_init(void)
 
 	/* Initialize work queue */
 	k_work_queue_init(&mqtt_workq);
-	k_work_queue_start(&mqtt_workq, mqtt_workq_stack,
-			   K_THREAD_STACK_SIZEOF(mqtt_workq_stack),
+	k_work_queue_start(&mqtt_workq, mqtt_workq_stack, K_THREAD_STACK_SIZEOF(mqtt_workq_stack),
 			   CONFIG_MQTT_CLIENT_THREAD_PRIORITY, NULL);
 
 	/* Configure MQTT helper callbacks */
 	struct mqtt_helper_cfg cfg = {
-		.cb = {
-			.on_connack = on_mqtt_connack,
-			.on_disconnect = on_mqtt_disconnect,
-			.on_publish = on_mqtt_publish,
-			.on_suback = on_mqtt_suback,
-		},
+		.cb =
+			{
+				.on_connack = on_mqtt_connack,
+				.on_disconnect = on_mqtt_disconnect,
+				.on_publish = on_mqtt_publish,
+				.on_suback = on_mqtt_suback,
+			},
 	};
 
 	err = mqtt_helper_init(&cfg);
