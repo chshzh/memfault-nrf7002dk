@@ -81,3 +81,64 @@ config NRF70_FW_STATS_CDR_ENABLED
 	  
 	  WARNING: CDR uploads are limited to 1 per device per 24 hours!
 	  Enable Developer Mode in Memfault dashboard for higher limits.
+
+config MQTT_CLIENT_ENABLED
+	bool "Enable MQTT client with TLS"
+	depends on MQTT_HELPER
+	depends on HW_ID_LIBRARY
+	default n
+	help
+	  Enable MQTT client that connects to a broker using TLS and
+	  publishes periodic messages. Uses the mqtt_helper library
+	  for simplified MQTT operations.
+
+if MQTT_CLIENT_ENABLED
+
+config MQTT_CLIENT_BROKER_HOSTNAME
+	string "MQTT broker hostname"
+	default "test.mosquitto.org"
+	help
+	  The hostname of the MQTT broker to connect to.
+
+config MQTT_CLIENT_PUBLISH_TOPIC
+	string "MQTT publish topic suffix"
+	default "count"
+	help
+	  The topic suffix for publishing messages.
+	  The full topic will be: <client_id>/<topic_suffix>
+
+config MQTT_CLIENT_PUBLISH_INTERVAL_SEC
+	int "MQTT publish interval in seconds"
+	default 60
+	help
+	  The interval between periodic MQTT message publishes.
+
+config MQTT_CLIENT_RECONNECT_TIMEOUT_SEC
+	int "MQTT reconnection timeout in seconds"
+	default 60
+	help
+	  Time in between reconnection attempts to the MQTT broker.
+
+config MQTT_CLIENT_WORKQUEUE_STACK_SIZE
+	int "MQTT client workqueue stack size"
+	default 4096
+	help
+	  Stack size for the MQTT client internal workqueue.
+
+config MQTT_CLIENT_THREAD_PRIORITY
+	int "MQTT client thread priority"
+	default 5
+	help
+	  Priority of the MQTT client workqueue thread.
+
+config MQTT_CLIENT_ID_BUFFER_SIZE
+	int "MQTT client ID buffer size"
+	default 50
+	help
+	  Size of buffer used to store the MQTT client ID.
+
+module = MQTT_CLIENT
+module-str = MQTT Client
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # MQTT_CLIENT_ENABLED
