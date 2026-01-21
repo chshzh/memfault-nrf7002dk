@@ -116,12 +116,12 @@ static void on_mqtt_publish(struct mqtt_helper_buf topic, struct mqtt_helper_buf
 		mqtt_loop_total++;
 		if (strcmp(received_msg, last_published_msg) == 0) {
 			/* Successful loopback */
-			MEMFAULT_METRIC_ADD(mqtt_loop_total_count, 1);
+			MEMFAULT_METRIC_SET_UNSIGNED(mqtt_loop_total_count, mqtt_loop_total);
 			LOG_INF("MQTT loopback success: '%s' matched", received_msg);
 		} else {
 			/* Loopback validation failed - mismatch */
 			mqtt_loop_failures++;
-			MEMFAULT_METRIC_ADD(mqtt_loop_fail_count, 1);
+			MEMFAULT_METRIC_SET_UNSIGNED(mqtt_loop_fail_count, mqtt_loop_failures);
 			LOG_ERR("MQTT loopback FAILED: expected '%s', got '%s'", last_published_msg,
 				received_msg);
 		}
@@ -274,7 +274,8 @@ static void publish_work_fn(struct k_work *work)
 	if (err) {
 		LOG_WRN("Failed to publish message: %d", err);
 		/* Increment failure count if publish fails */
-		MEMFAULT_METRIC_ADD(mqtt_loop_fail_count, 1);
+		mqtt_loop_failures++;
+		MEMFAULT_METRIC_SET_UNSIGNED(mqtt_loop_fail_count, mqtt_loop_failures);
 	} else {
 		LOG_INF("Published message: \"%s\" on topic: \"%s\"", payload, pub_topic);
 	}

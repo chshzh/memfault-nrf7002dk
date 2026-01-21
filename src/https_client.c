@@ -185,7 +185,7 @@ static void send_http_request(void)
 
 	/* Increment total request count (both local and Memfault) */
 	https_req_total++;
-	MEMFAULT_METRIC_ADD(https_req_total_count, 1);
+	MEMFAULT_METRIC_SET_UNSIGNED(https_req_total_count, https_req_total);
 
 	LOG_INF("Looking up %s", CONFIG_HTTPS_HOSTNAME);
 
@@ -273,7 +273,7 @@ static void send_http_request(void)
 clean_up:
 	if (request_failed) {
 		https_req_failures++;
-		MEMFAULT_METRIC_ADD(https_req_fail_count, 1);
+		MEMFAULT_METRIC_SET_UNSIGNED(https_req_fail_count, https_req_failures);
 	}
 	/* Log local metrics after each request */
 	LOG_INF("HTTPS Request Test Metrics - Total: %u, Failures: %u", https_req_total,
