@@ -43,6 +43,10 @@
 #include "https_client.h"
 #endif
 
+#ifdef CONFIG_MQTT_CLIENT_ENABLED
+#include "mqtt_client.h"
+#endif
+
 #ifdef CONFIG_NRF70_FW_STATS_CDR_ENABLED
 #include "mflt_nrf70_fw_stats_cdr.h"
 #endif
@@ -238,6 +242,11 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_e
 		https_client_notify_connected();
 #endif
 
+		/* Notify MQTT client that network is connected */
+#ifdef CONFIG_MQTT_CLIENT_ENABLED
+		app_mqtt_client_notify_connected();
+#endif
+
 		k_sem_give(&net_conn_sem);
 		mflt_ota_triggers_notify_connected();
 		break;
@@ -257,6 +266,11 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_e
 		/* Notify HTTPS client that network is disconnected */
 #ifdef CONFIG_HTTPS_CLIENT_ENABLED
 		https_client_notify_disconnected();
+#endif
+
+		/* Notify MQTT client that network is disconnected */
+#ifdef CONFIG_MQTT_CLIENT_ENABLED
+		app_mqtt_client_notify_disconnected();
 #endif
 		break;
 	default:
@@ -344,6 +358,14 @@ int main(void)
 	err = https_client_init();
 	if (err) {
 		LOG_ERR("HTTPS client initialization failed: %d", err);
+	}
+#endif
+
+#ifdef CONFIG_MQTT_CLIENT_ENABLED
+	/* Initialize MQTT client */
+	err = app_mqtt_client_init();
+	if (err) {
+		LOG_ERR("MQTT client initialization failed: %d", err);
 	}
 #endif
 

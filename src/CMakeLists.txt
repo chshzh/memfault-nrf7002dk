@@ -23,6 +23,11 @@ if(CONFIG_HTTPS_CLIENT_ENABLED)
     target_sources(app PRIVATE https_client.c)
 endif()
 
+# Add MQTT client when enabled
+if(CONFIG_MQTT_CLIENT_ENABLED)
+    target_sources(app PRIVATE mqtt_client.c)
+endif()
+
 # Add nRF70 FW stats CDR when enabled
 if(CONFIG_NRF70_FW_STATS_CDR_ENABLED)
     target_sources(app PRIVATE mflt_nrf70_fw_stats_cdr.c)

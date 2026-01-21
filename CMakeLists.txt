@@ -20,6 +20,11 @@ if(CONFIG_HTTPS_CLIENT_ENABLED)
     )
 endif()
 
+# Set MQTT certificate folder for mqtt_helper auto-provisioning
+if(CONFIG_MQTT_CLIENT_ENABLED AND CONFIG_MQTT_HELPER_PROVISION_CERTIFICATES)
+    set(MQTT_HELPER_CERTIFICATES_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/cert")
+endif()
+
 # NORDIC SDK APP START
 add_subdirectory(src)
 # NORDIC SDK APP END
