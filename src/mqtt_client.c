@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Nordic Semiconductor ASA
+ * Copyright (c) 2026 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
@@ -38,6 +38,8 @@ static enum app_mqtt_client_state current_state = APP_MQTT_STATE_DISCONNECTED;
 static bool network_ready;
 static uint32_t message_count;
 static char last_published_msg[32]; /* Track last published message for validation */
+static uint32_t mqtt_loop_total;    /* Local counter for total loopback tests */
+static uint32_t mqtt_loop_failures; /* Local counter for failed loopback tests */
 
 /* Client ID and topic buffers */
 static char client_id[CONFIG_MQTT_CLIENT_ID_BUFFER_SIZE];
@@ -111,25 +113,23 @@ static void on_mqtt_publish(struct mqtt_helper_buf topic, struct mqtt_helper_buf
 
 	/* Validate loopback: check if received matches published */
 	if (last_published_msg[0] != '\0') {
+		mqtt_loop_total++;
 		if (strcmp(received_msg, last_published_msg) == 0) {
 			/* Successful loopback */
 			MEMFAULT_METRIC_ADD(mqtt_loop_total_count, 1);
 			LOG_INF("MQTT loopback success: '%s' matched", received_msg);
 		} else {
 			/* Loopback validation failed - mismatch */
+			mqtt_loop_failures++;
 			MEMFAULT_METRIC_ADD(mqtt_loop_fail_count, 1);
 			LOG_ERR("MQTT loopback FAILED: expected '%s', got '%s'", last_published_msg,
 				received_msg);
 		}
 	}
 
-	/* Log Memfault metrics */
-	int32_t total = 0, failures = 0;
-	memfault_metrics_heartbeat_read_unsigned(MEMFAULT_METRICS_KEY(mqtt_loop_total_count),
-						 (uint32_t *)&total);
-	memfault_metrics_heartbeat_read_unsigned(MEMFAULT_METRICS_KEY(mqtt_loop_fail_count),
-						 (uint32_t *)&failures);
-	LOG_INF("MQTT Loop Test Metrics - Total: %d, Failures: %d", total, failures);
+	/* Log local metrics (these persist across heartbeat intervals) */
+	LOG_INF("MQTT Loop Test Metrics - Total: %u, Failures: %u", mqtt_loop_total,
+		mqtt_loop_failures);
 }
 
 static void on_mqtt_suback(uint16_t message_id, int result)

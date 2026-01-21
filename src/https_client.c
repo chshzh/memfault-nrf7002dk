@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Nordic Semiconductor ASA
+ * Copyright (c) 2026 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
@@ -46,6 +46,8 @@ static char recv_buf[RECV_BUF_SIZE];
 static K_SEM_DEFINE(https_thread_sem, 0, 1);
 static bool https_client_running = false;
 static bool network_ready = false;
+static uint32_t https_req_total;    /* Local counter for total requests */
+static uint32_t https_req_failures; /* Local counter for failed requests */
 
 /* Certificate for hostname */
 static const char cert[] = {
@@ -181,7 +183,8 @@ static void send_http_request(void)
 		return;
 	}
 
-	/* Increment total request count */
+	/* Increment total request count (both local and Memfault) */
+	https_req_total++;
 	MEMFAULT_METRIC_ADD(https_req_total_count, 1);
 
 	LOG_INF("Looking up %s", CONFIG_HTTPS_HOSTNAME);
@@ -269,8 +272,13 @@ static void send_http_request(void)
 
 clean_up:
 	if (request_failed) {
+		https_req_failures++;
 		MEMFAULT_METRIC_ADD(https_req_fail_count, 1);
 	}
+	/* Log local metrics after each request */
+	LOG_INF("HTTPS Request Test Metrics - Total: %u, Failures: %u", https_req_total,
+		https_req_failures);
+
 	if (res) {
 		freeaddrinfo(res);
 	}
@@ -315,13 +323,6 @@ static void https_client_thread(void *arg1, void *arg2, void *arg3)
 			HTTPS_REQUEST_INTERVAL_SEC);
 
 		k_sleep(K_SECONDS(3));
-		/* SLog Memfault metrics */
-		int32_t total = 0, failures = 0;
-		memfault_metrics_heartbeat_read_unsigned(
-			MEMFAULT_METRICS_KEY(https_req_total_count), (uint32_t *)&total);
-		memfault_metrics_heartbeat_read_unsigned(MEMFAULT_METRICS_KEY(https_req_fail_count),
-							 (uint32_t *)&failures);
-		LOG_INF("HTTPS Request Test Metrics - Total: %d, Failures: %d", total, failures);
 		while (https_client_running && network_ready) {
 			send_http_request();
 			LOG_INF("HTTP request count: %d", http_request_count++);
