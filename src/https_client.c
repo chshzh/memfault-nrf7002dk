@@ -174,6 +174,7 @@ static void send_http_request(void)
 	struct addrinfo hints = {
 		.ai_flags = AI_NUMERICSERV, /* Let getaddrinfo() set port */
 		.ai_socktype = SOCK_STREAM,
+		.ai_family = AF_INET, /* Force IPv4 to reduce DNS lookup time */
 	};
 	char peer_addr[INET6_ADDRSTRLEN];
 	bool request_failed = false;
@@ -206,9 +207,18 @@ static void send_http_request(void)
 		fd = socket(res->ai_family, SOCK_STREAM, IPPROTO_TLS_1_2);
 	}
 	if (fd == -1) {
+		LOG_ERR("socket() failed, err %d", errno);
 		request_failed = true;
 		goto clean_up;
 	}
+
+	/* Set socket timeouts to prevent hanging */
+	struct timeval timeout = {
+		.tv_sec = 30,
+		.tv_usec = 0,
+	};
+	(void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+	(void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
 	/* Setup TLS socket options */
 	err = tls_setup(fd);
@@ -279,11 +289,15 @@ clean_up:
 	LOG_INF("HTTPS Request Test Metrics - Total: %u, Failures: %u", https_req_total,
 		https_req_failures);
 
+	if (fd >= 0) {
+		/* Graceful shutdown - notify peer we're done sending */
+		(void)zsock_shutdown(fd, ZSOCK_SHUT_RDWR);
+		(void)close(fd);
+		/* Small delay to allow TCP/TLS resources to be released */
+		k_sleep(K_MSEC(100));
+	}
 	if (res) {
 		freeaddrinfo(res);
-	}
-	if (fd >= 0) {
-		(void)close(fd);
 	}
 }
 
