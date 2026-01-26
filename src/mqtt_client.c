@@ -30,8 +30,8 @@ static K_WORK_DELAYABLE_DEFINE(connect_work, connect_work_fn);
 static K_WORK_DELAYABLE_DEFINE(publish_work, publish_work_fn);
 
 /* Define work queue stack */
-K_THREAD_STACK_DEFINE(mqtt_workq_stack, CONFIG_MQTT_CLIENT_WORKQUEUE_STACK_SIZE);
-static struct k_work_q mqtt_workq;
+K_THREAD_STACK_DEFINE(mqtt_client_workq_stack, CONFIG_MQTT_CLIENT_WORKQUEUE_STACK_SIZE);
+static struct k_work_q mqtt_client_workq;
 
 /* State variables */
 static enum app_mqtt_client_state current_state = APP_MQTT_STATE_DISCONNECTED;
@@ -80,7 +80,7 @@ static void on_mqtt_connack(enum mqtt_conn_return_code return_code, bool session
 	}
 
 	/* Start periodic publishing */
-	k_work_reschedule_for_queue(&mqtt_workq, &publish_work,
+	k_work_reschedule_for_queue(&mqtt_client_workq, &publish_work,
 				    K_SECONDS(CONFIG_MQTT_CLIENT_PUBLISH_INTERVAL_SEC));
 }
 
@@ -96,7 +96,7 @@ static void on_mqtt_disconnect(int result)
 	if (network_ready) {
 		LOG_INF("Scheduling reconnection in %d seconds",
 			CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC);
-		k_work_reschedule_for_queue(&mqtt_workq, &connect_work,
+		k_work_reschedule_for_queue(&mqtt_client_workq, &connect_work,
 					    K_SECONDS(CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC));
 	}
 }
@@ -238,7 +238,7 @@ static void connect_work_fn(struct k_work *work)
 		LOG_ERR("Failed to connect to MQTT broker: %d", err);
 		current_state = APP_MQTT_STATE_DISCONNECTED;
 		/* Schedule retry */
-		k_work_reschedule_for_queue(&mqtt_workq, &connect_work,
+		k_work_reschedule_for_queue(&mqtt_client_workq, &connect_work,
 					    K_SECONDS(CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC));
 	}
 }
@@ -281,7 +281,7 @@ static void publish_work_fn(struct k_work *work)
 	}
 
 	/* Schedule next publish */
-	k_work_reschedule_for_queue(&mqtt_workq, &publish_work,
+	k_work_reschedule_for_queue(&mqtt_client_workq, &publish_work,
 				    K_SECONDS(CONFIG_MQTT_CLIENT_PUBLISH_INTERVAL_SEC));
 }
 
@@ -292,8 +292,9 @@ int app_mqtt_client_init(void)
 	LOG_INF("Initializing MQTT client");
 
 	/* Initialize work queue */
-	k_work_queue_init(&mqtt_workq);
-	k_work_queue_start(&mqtt_workq, mqtt_workq_stack, K_THREAD_STACK_SIZEOF(mqtt_workq_stack),
+	k_work_queue_init(&mqtt_client_workq);
+	k_work_queue_start(&mqtt_client_workq, mqtt_client_workq_stack,
+			   K_THREAD_STACK_SIZEOF(mqtt_client_workq_stack),
 			   CONFIG_MQTT_CLIENT_THREAD_PRIORITY, NULL);
 
 	/* Configure MQTT helper callbacks */
@@ -323,7 +324,7 @@ void app_mqtt_client_notify_connected(void)
 	network_ready = true;
 
 	/* Wait a few seconds for network stack to stabilize */
-	k_work_reschedule_for_queue(&mqtt_workq, &connect_work, K_SECONDS(5));
+	k_work_reschedule_for_queue(&mqtt_client_workq, &connect_work, K_SECONDS(5));
 }
 
 void app_mqtt_client_notify_disconnected(void)
