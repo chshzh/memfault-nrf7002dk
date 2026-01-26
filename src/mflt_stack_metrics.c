@@ -34,7 +34,7 @@ static struct memfault_ncs_metrics_thread stack_metrics_threads[] = {
 	{.thread_name = "tcp_work", .key = MEMFAULT_METRICS_KEY(ncs_tcp_work_unused_stack)},
 	/* Application threads */
 	{.thread_name = "https_client_tid", .key = MEMFAULT_METRICS_KEY(https_client_unused_stack)},
-	{.thread_name = "mqtt_client_workq", .key = MEMFAULT_METRICS_KEY(mqtt_client_unused_stack)},
+	{.thread_name = "mqtt_client_tid", .key = MEMFAULT_METRICS_KEY(mqtt_client_unused_stack)},
 	/* System threads */
 	{.thread_name = "shell_uart", .key = MEMFAULT_METRICS_KEY(ncs_shell_uart_unused_stack)},
 	{.thread_name = "logging", .key = MEMFAULT_METRICS_KEY(ncs_logging_unused_stack)},

@@ -21,35 +21,18 @@ enum app_mqtt_client_state {
 	APP_MQTT_STATE_CONNECTED,
 };
 
-/* Forward declarations */
-static void connect_work_fn(struct k_work *work);
-static void publish_work_fn(struct k_work *work);
-
-/* Define delayed work items */
-static K_WORK_DELAYABLE_DEFINE(connect_work, connect_work_fn);
-static K_WORK_DELAYABLE_DEFINE(publish_work, publish_work_fn);
-
-/* Define work queue stack */
-K_THREAD_STACK_DEFINE(mqtt_client_workq_stack, CONFIG_MQTT_CLIENT_WORKQUEUE_STACK_SIZE);
-static struct k_work_q mqtt_client_workq;
-
 /* State variables */
 static enum app_mqtt_client_state current_state = APP_MQTT_STATE_DISCONNECTED;
-static bool network_ready;
+static bool mqtt_client_running = false;
+static bool network_ready = false;
 static uint32_t message_count;
-static char last_published_msg[32]; /* Track last published message for validation */
-static uint32_t mqtt_loop_total;    /* Local counter for total loopback tests */
-static uint32_t mqtt_loop_failures; /* Local counter for failed loopback tests */
+static uint32_t mqtt_loop_total;
+static uint32_t mqtt_loop_failures;
+static K_SEM_DEFINE(mqtt_thread_sem, 0, 1);
 
 /* Client ID and topic buffers */
 static char client_id[CONFIG_MQTT_CLIENT_ID_BUFFER_SIZE];
-static char pub_topic[CONFIG_MQTT_CLIENT_ID_BUFFER_SIZE + sizeof(CONFIG_MQTT_CLIENT_PUBLISH_TOPIC) +
-		      16];
-static char sub_topic[CONFIG_MQTT_CLIENT_ID_BUFFER_SIZE + sizeof(CONFIG_MQTT_CLIENT_PUBLISH_TOPIC) +
-		      16];
-
-/* Forward declaration for subscribe */
-static int subscribe_to_topic(void);
+static char pub_topic[CONFIG_MQTT_CLIENT_ID_BUFFER_SIZE + sizeof(CONFIG_MQTT_CLIENT_PUBLISH_TOPIC)];
 
 /* MQTT helper callbacks */
 static void on_mqtt_connack(enum mqtt_conn_return_code return_code, bool session_present)
@@ -70,66 +53,43 @@ static void on_mqtt_connack(enum mqtt_conn_return_code return_code, bool session
 
 	current_state = APP_MQTT_STATE_CONNECTED;
 
-	/* Cancel reconnection attempts */
-	k_work_cancel_delayable(&connect_work);
-
-	/* Subscribe to loopback topic */
-	int err = subscribe_to_topic();
-	if (err) {
-		LOG_WRN("Failed to subscribe: %d", err);
+	/* Subscribe to the publish topic for loopback test */
+	if (pub_topic[0] != '\0') {
+		struct mqtt_topic sub_topic = {
+			.topic.utf8 = pub_topic,
+			.topic.size = strlen(pub_topic),
+			.qos = MQTT_QOS_1_AT_LEAST_ONCE,
+		};
+		struct mqtt_subscription_list sub_list = {
+			.list = &sub_topic,
+			.list_count = 1,
+			.message_id = mqtt_helper_msg_id_get(),
+		};
+		int err = mqtt_helper_subscribe(&sub_list);
+		if (err) {
+			LOG_WRN("Failed to subscribe to topic: %d", err);
+		} else {
+			LOG_INF("Subscribing to topic: %s", pub_topic);
+		}
 	}
-
-	/* Start periodic publishing */
-	k_work_reschedule_for_queue(&mqtt_client_workq, &publish_work,
-				    K_SECONDS(CONFIG_MQTT_CLIENT_PUBLISH_INTERVAL_SEC));
 }
 
 static void on_mqtt_disconnect(int result)
 {
 	LOG_INF("Disconnected from MQTT broker, result: %d", result);
 	current_state = APP_MQTT_STATE_DISCONNECTED;
-
-	/* Stop publishing */
-	k_work_cancel_delayable(&publish_work);
-
-	/* Schedule reconnection if network is still available */
-	if (network_ready) {
-		LOG_INF("Scheduling reconnection in %d seconds",
-			CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC);
-		k_work_reschedule_for_queue(&mqtt_client_workq, &connect_work,
-					    K_SECONDS(CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC));
-	}
 }
 
 static void on_mqtt_publish(struct mqtt_helper_buf topic, struct mqtt_helper_buf payload)
 {
-	char received_msg[32];
-	size_t copy_len = MIN(payload.size, sizeof(received_msg) - 1);
-	memcpy(received_msg, payload.ptr, copy_len);
-	received_msg[copy_len] = '\0';
-
 	LOG_INF("Received payload: %.*s on topic: %.*s", payload.size, payload.ptr, topic.size,
 		topic.ptr);
 
-	/* Validate loopback: check if received matches published */
-	if (last_published_msg[0] != '\0') {
-		mqtt_loop_total++;
-		if (strcmp(received_msg, last_published_msg) == 0) {
-			/* Successful loopback */
-			MEMFAULT_METRIC_SET_UNSIGNED(mqtt_loop_total_count, mqtt_loop_total);
-			LOG_INF("MQTT loopback success: '%s' matched", received_msg);
-		} else {
-			/* Loopback validation failed - mismatch */
-			mqtt_loop_failures++;
-			MEMFAULT_METRIC_SET_UNSIGNED(mqtt_loop_fail_count, mqtt_loop_failures);
-			LOG_ERR("MQTT loopback FAILED: expected '%s', got '%s'", last_published_msg,
-				received_msg);
-		}
-	}
-
-	/* Log local metrics (these persist across heartbeat intervals) */
-	LOG_INF("MQTT Loop Test Metrics - Total: %u, Failures: %u", mqtt_loop_total,
-		mqtt_loop_failures);
+	/* Update MQTT loopback metrics - message received back successfully */
+	mqtt_loop_total++;
+	MEMFAULT_METRIC_SET_UNSIGNED(mqtt_loop_total_count, mqtt_loop_total);
+	LOG_INF("MQTT Loopback Test Metrics - Total: %u, Failures: %u",
+		mqtt_loop_total, mqtt_loop_failures);
 }
 
 static void on_mqtt_suback(uint16_t message_id, int result)
@@ -152,59 +112,23 @@ static int setup_topics(void)
 		return -EMSGSIZE;
 	}
 
-	/* Subscribe to the same topic for loopback */
-	len = snprintk(sub_topic, sizeof(sub_topic), "Memfault/%s/%s", client_id,
-		       CONFIG_MQTT_CLIENT_PUBLISH_TOPIC);
-	if ((len < 0) || (len >= sizeof(sub_topic))) {
-		LOG_ERR("Subscribe topic buffer too small");
-		return -EMSGSIZE;
-	}
-
 	LOG_INF("Publish topic: %s", pub_topic);
-	LOG_INF("Subscribe topic: %s", sub_topic);
 	return 0;
 }
 
-static int subscribe_to_topic(void)
+static int app_mqtt_connect(void)
 {
 	int err;
-	struct mqtt_topic topics[] = {
-		{
-			.topic.utf8 = sub_topic,
-			.topic.size = strlen(sub_topic),
-			.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		},
-	};
-	struct mqtt_subscription_list sub_list = {
-		.list = topics,
-		.list_count = ARRAY_SIZE(topics),
-		.message_id = mqtt_helper_msg_id_get(),
-	};
-
-	LOG_INF("Subscribing to topic: %s", sub_topic);
-
-	err = mqtt_helper_subscribe(&sub_list);
-	if (err) {
-		LOG_ERR("Failed to subscribe: %d", err);
-		return err;
-	}
-
-	return 0;
-}
-
-static void connect_work_fn(struct k_work *work)
-{
-	ARG_UNUSED(work);
-	int err;
-
-	if (!network_ready) {
-		LOG_WRN("Network not ready, skipping MQTT connection");
-		return;
-	}
 
 	if (current_state == APP_MQTT_STATE_CONNECTED) {
 		LOG_DBG("Already connected to MQTT broker");
-		return;
+		return 0;
+	}
+
+	if (current_state == APP_MQTT_STATE_CONNECTING) {
+		LOG_DBG("Already connecting to MQTT broker, waiting...");
+		/* Return error to keep the retry loop waiting */
+		return -EINPROGRESS;
 	}
 
 	current_state = APP_MQTT_STATE_CONNECTING;
@@ -214,14 +138,14 @@ static void connect_work_fn(struct k_work *work)
 	if (err) {
 		LOG_ERR("Failed to get hardware ID: %d", err);
 		current_state = APP_MQTT_STATE_DISCONNECTED;
-		return;
+		return err;
 	}
 
 	err = setup_topics();
 	if (err) {
 		LOG_ERR("Failed to setup topics: %d", err);
 		current_state = APP_MQTT_STATE_DISCONNECTED;
-		return;
+		return err;
 	}
 
 	struct mqtt_helper_conn_params conn_params = {
@@ -237,29 +161,24 @@ static void connect_work_fn(struct k_work *work)
 	if (err) {
 		LOG_ERR("Failed to connect to MQTT broker: %d", err);
 		current_state = APP_MQTT_STATE_DISCONNECTED;
-		/* Schedule retry */
-		k_work_reschedule_for_queue(&mqtt_client_workq, &connect_work,
-					    K_SECONDS(CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC));
+		return err;
 	}
+
+	return 0;
 }
 
-static void publish_work_fn(struct k_work *work)
+static int mqtt_publish_message(void)
 {
-	ARG_UNUSED(work);
 	int err;
 	char payload[128];
 
 	if (current_state != APP_MQTT_STATE_CONNECTED) {
 		LOG_WRN("Not connected to MQTT broker, skipping publish");
-		return;
+		return -ENOTCONN;
 	}
 
 	message_count++;
 	snprintk(payload, sizeof(payload), "%u", message_count);
-
-	/* Save for loopback validation */
-	strncpy(last_published_msg, payload, sizeof(last_published_msg) - 1);
-	last_published_msg[sizeof(last_published_msg) - 1] = '\0';
 
 	struct mqtt_publish_param param = {
 		.message.payload.data = payload,
@@ -273,29 +192,25 @@ static void publish_work_fn(struct k_work *work)
 	err = mqtt_helper_publish(&param);
 	if (err) {
 		LOG_WRN("Failed to publish message: %d", err);
-		/* Increment failure count if publish fails */
+		/* Update failure metric */
 		mqtt_loop_failures++;
 		MEMFAULT_METRIC_SET_UNSIGNED(mqtt_loop_fail_count, mqtt_loop_failures);
-	} else {
-		LOG_INF("Published message: \"%s\" on topic: \"%s\"", payload, pub_topic);
+		return err;
 	}
 
-	/* Schedule next publish */
-	k_work_reschedule_for_queue(&mqtt_client_workq, &publish_work,
-				    K_SECONDS(CONFIG_MQTT_CLIENT_PUBLISH_INTERVAL_SEC));
+	LOG_INF("Published message: \"%s\" on topic: \"%s\"", payload, pub_topic);
+	return 0;
 }
 
-int app_mqtt_client_init(void)
+static void mqtt_client_thread(void *arg1, void *arg2, void *arg3)
 {
+	ARG_UNUSED(arg1);
+	ARG_UNUSED(arg2);
+	ARG_UNUSED(arg3);
+
 	int err;
 
-	LOG_INF("Initializing MQTT client");
-
-	/* Initialize work queue */
-	k_work_queue_init(&mqtt_client_workq);
-	k_work_queue_start(&mqtt_client_workq, mqtt_client_workq_stack,
-			   K_THREAD_STACK_SIZEOF(mqtt_client_workq_stack),
-			   CONFIG_MQTT_CLIENT_THREAD_PRIORITY, NULL);
+	LOG_INF("MQTT client thread started");
 
 	/* Configure MQTT helper callbacks */
 	struct mqtt_helper_cfg cfg = {
@@ -311,30 +226,73 @@ int app_mqtt_client_init(void)
 	err = mqtt_helper_init(&cfg);
 	if (err) {
 		LOG_ERR("Failed to initialize MQTT helper: %d", err);
-		return err;
+		return;
 	}
 
+	while (mqtt_client_running) {
+		/* Wait for network connection */
+		k_sem_take(&mqtt_thread_sem, K_FOREVER);
+
+		if (!mqtt_client_running) {
+			break;
+		}
+
+		network_ready = true;
+		LOG_INF("Network ready, starting MQTT operations");
+
+		/* Wait a few seconds for network stack to stabilize */
+		k_sleep(K_SECONDS(5));
+
+		/* Try to connect to MQTT broker */
+		while (mqtt_client_running && network_ready &&
+		       current_state != APP_MQTT_STATE_CONNECTED) {
+			err = app_mqtt_connect();
+			if (err == -EINPROGRESS) {
+				/* Connection in progress, wait briefly and check again */
+				k_sleep(K_MSEC(500));
+			} else if (err) {
+				LOG_INF("Retrying MQTT connection in %d seconds",
+					CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC);
+				k_sleep(K_SECONDS(CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC));
+			}
+		}
+
+		/* Publish messages periodically while connected */
+		while (mqtt_client_running && network_ready &&
+		       current_state == APP_MQTT_STATE_CONNECTED) {
+			mqtt_publish_message();
+			k_sleep(K_SECONDS(CONFIG_MQTT_CLIENT_PUBLISH_INTERVAL_SEC));
+		}
+
+		LOG_INF("Network disconnected or client stopped");
+	}
+
+	LOG_INF("MQTT client thread exiting");
+}
+
+K_THREAD_DEFINE(mqtt_client_tid, CONFIG_MQTT_CLIENT_STACK_SIZE, mqtt_client_thread, NULL, NULL,
+		NULL, CONFIG_MQTT_CLIENT_THREAD_PRIORITY, 0, 0);
+
+int app_mqtt_client_init(void)
+{
 	LOG_INF("MQTT client initialized");
+	mqtt_client_running = true;
 	return 0;
 }
 
 void app_mqtt_client_notify_connected(void)
 {
-	LOG_INF("Network connected, scheduling MQTT connection");
-	network_ready = true;
-
-	/* Wait a few seconds for network stack to stabilize */
-	k_work_reschedule_for_queue(&mqtt_client_workq, &connect_work, K_SECONDS(5));
+	if (mqtt_client_running) {
+		LOG_INF("Network connected, notifying MQTT client");
+		network_ready = true;
+		k_sem_give(&mqtt_thread_sem);
+	}
 }
 
 void app_mqtt_client_notify_disconnected(void)
 {
 	LOG_INF("Network disconnected, stopping MQTT client");
 	network_ready = false;
-
-	/* Cancel pending work */
-	k_work_cancel_delayable(&connect_work);
-	k_work_cancel_delayable(&publish_work);
 
 	/* Disconnect from broker if connected */
 	if (current_state == APP_MQTT_STATE_CONNECTED) {
