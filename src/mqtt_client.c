@@ -78,6 +78,13 @@ static void on_mqtt_disconnect(int result)
 {
 	LOG_INF("Disconnected from MQTT broker, result: %d", result);
 	current_state = APP_MQTT_STATE_DISCONNECTED;
+
+	/* If network is still ready, this was an unexpected disconnect
+	 * (e.g., NAT timeout, broker kicked us). Signal for reconnection.
+	 */
+	if (network_ready) {
+		LOG_WRN("Unexpected disconnect, will attempt reconnection");
+	}
 }
 
 static void on_mqtt_publish(struct mqtt_helper_buf topic, struct mqtt_helper_buf payload)
@@ -243,25 +250,38 @@ static void mqtt_client_thread(void *arg1, void *arg2, void *arg3)
 		/* Wait a few seconds for network stack to stabilize */
 		k_sleep(K_SECONDS(5));
 
-		/* Try to connect to MQTT broker */
-		while (mqtt_client_running && network_ready &&
-		       current_state != APP_MQTT_STATE_CONNECTED) {
-			err = app_mqtt_connect();
-			if (err == -EINPROGRESS) {
-				/* Connection in progress, wait briefly and check again */
-				k_sleep(K_MSEC(500));
-			} else if (err) {
-				LOG_INF("Retrying MQTT connection in %d seconds",
+		/* Main MQTT operation loop - handles connect, publish, and reconnect */
+		while (mqtt_client_running && network_ready) {
+			/* Try to connect to MQTT broker if not connected */
+			while (mqtt_client_running && network_ready &&
+			       current_state != APP_MQTT_STATE_CONNECTED) {
+				err = app_mqtt_connect();
+				if (err == -EINPROGRESS) {
+					/* Connection in progress, wait briefly and check again */
+					k_sleep(K_MSEC(500));
+				} else if (err) {
+					LOG_INF("Retrying MQTT connection in %d seconds",
+						CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC);
+					k_sleep(K_SECONDS(CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC));
+				}
+			}
+
+			/* Publish messages periodically while connected */
+			while (mqtt_client_running && network_ready &&
+			       current_state == APP_MQTT_STATE_CONNECTED) {
+				mqtt_publish_message();
+				k_sleep(K_SECONDS(CONFIG_MQTT_CLIENT_PUBLISH_INTERVAL_SEC));
+			}
+
+			/* If we get here and network is still ready, broker disconnected us.
+			 * Wait briefly then loop back to reconnect.
+			 */
+			if (mqtt_client_running && network_ready &&
+			    current_state == APP_MQTT_STATE_DISCONNECTED) {
+				LOG_INF("Broker connection lost, reconnecting in %d seconds",
 					CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC);
 				k_sleep(K_SECONDS(CONFIG_MQTT_CLIENT_RECONNECT_TIMEOUT_SEC));
 			}
-		}
-
-		/* Publish messages periodically while connected */
-		while (mqtt_client_running && network_ready &&
-		       current_state == APP_MQTT_STATE_CONNECTED) {
-			mqtt_publish_message();
-			k_sleep(K_SECONDS(CONFIG_MQTT_CLIENT_PUBLISH_INTERVAL_SEC));
 		}
 
 		LOG_INF("Network disconnected or client stopped");
