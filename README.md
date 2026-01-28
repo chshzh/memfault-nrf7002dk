@@ -22,6 +22,7 @@ This sample application showcases:
 ### Optional Features (via overlays)
 
 - 📡 **HTTPS Client** - Periodic connectivity testing (`overlay-https-req.conf`)
+- 📨 **MQTT Echo Test** - MQTT broker connectivity testing with TLS (`overlay-mqtt-echo.conf`)
 
 ## Hardware Requirements
 
@@ -82,6 +83,7 @@ memfault-nrf7002dk/
 ├── src/
 │   ├── main.c                       # Application entry point
 │   ├── https_client.c/h             # HTTPS client (optional)
+│   ├── mqtt_client.c/h              # MQTT echo test client (optional)
 │   ├── ble_provisioning.c/h         # BLE WiFi provisioning
 │   ├── mflt_ota_triggers.c/h        # OTA automation logic
 │   ├── mflt_wifi_metrics.c/h        # WiFi metrics collection
@@ -90,12 +92,14 @@ memfault-nrf7002dk/
 ├── boards/
 │   └── nrf7002dk_nrf5340_cpuapp.conf # Board-specific config
 ├── cert/
-│   └── SSLcom-TLS-Root-2022-ECC.pem         # Root CA for HTTPS
+│   ├── SSLcom-TLS-Root-2022-ECC.pem # Root CA for HTTPS
+│   └── mqtt-ca.pem                  # Root CA for MQTT broker
 ├── config/
 │   └── memfault_metrics_heartbeat_config.def  # Metric definitions
 ├── sysbuild/                         # Multi-image build configs
 ├── prj.conf                          # Main configuration
 ├── overlay-https-req.conf           # HTTPS client overlay (optional)
+├── overlay-mqtt-echo.conf           # MQTT echo test overlay (optional)
 ├── pm_static_*.yml                  # Flash partition layout
 └── README.md
 ```
@@ -132,6 +136,30 @@ west flash --erase
 **Additional features**:
 - ✅ Periodic HTTPS HEAD requests to `example.com` (every 60s)
 - ✅ Network connectivity monitoring
+
+### With MQTT Echo Test (Optional)
+
+Adds MQTT broker connectivity testing with TLS:
+
+```bash
+west build -b nrf7002dk/nrf5340/cpuapp -p -- \
+  -DEXTRA_CONF_FILE="overlay-mqtt-echo.conf"
+west flash --erase
+```
+
+**Additional features**:
+- ✅ TLS-secured MQTT connection to `test.mosquitto.org:8883`
+- ✅ Publishes messages and subscribes to same topic (echo test)
+- ✅ Automatic reconnection on broker disconnect
+- ✅ Metrics: `mqtt_echo_total_count`, `mqtt_echo_fail_count`
+
+### With Both HTTPS and MQTT (Optional)
+
+```bash
+west build -b nrf7002dk/nrf5340/cpuapp -p -- \
+  -DEXTRA_CONF_FILE="overlay-https-req.conf;overlay-mqtt-echo.conf"
+west flash --erase
+```
 
 ---
 

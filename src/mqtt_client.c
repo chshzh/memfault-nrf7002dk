@@ -26,8 +26,8 @@ static enum app_mqtt_client_state current_state = APP_MQTT_STATE_DISCONNECTED;
 static bool mqtt_client_running = false;
 static bool network_ready = false;
 static uint32_t message_count;
-static uint32_t mqtt_loop_total;
-static uint32_t mqtt_loop_failures;
+static uint32_t mqtt_echo_total;
+static uint32_t mqtt_echo_failures;
 static K_SEM_DEFINE(mqtt_thread_sem, 0, 1);
 
 /* Client ID and topic buffers */
@@ -53,7 +53,7 @@ static void on_mqtt_connack(enum mqtt_conn_return_code return_code, bool session
 
 	current_state = APP_MQTT_STATE_CONNECTED;
 
-	/* Subscribe to the publish topic for loopback test */
+	/* Subscribe to the publish topic for echo test */
 	if (pub_topic[0] != '\0') {
 		struct mqtt_topic sub_topic = {
 			.topic.utf8 = pub_topic,
@@ -92,11 +92,11 @@ static void on_mqtt_publish(struct mqtt_helper_buf topic, struct mqtt_helper_buf
 	LOG_INF("Received payload: %.*s on topic: %.*s", payload.size, payload.ptr, topic.size,
 		topic.ptr);
 
-	/* Update MQTT loopback metrics - message received back successfully */
-	mqtt_loop_total++;
-	MEMFAULT_METRIC_SET_UNSIGNED(mqtt_loop_total_count, mqtt_loop_total);
-	LOG_INF("MQTT Loopback Test Metrics - Total: %u, Failures: %u",
-		mqtt_loop_total, mqtt_loop_failures);
+	/* Update MQTT echo metrics - message received back successfully */
+	mqtt_echo_total++;
+	MEMFAULT_METRIC_SET_UNSIGNED(mqtt_echo_total_count, mqtt_echo_total);
+	LOG_INF("MQTT Echo Test Metrics - Total: %u, Failures: %u",
+		mqtt_echo_total, mqtt_echo_failures);
 }
 
 static void on_mqtt_suback(uint16_t message_id, int result)
@@ -200,8 +200,8 @@ static int mqtt_publish_message(void)
 	if (err) {
 		LOG_WRN("Failed to publish message: %d", err);
 		/* Update failure metric */
-		mqtt_loop_failures++;
-		MEMFAULT_METRIC_SET_UNSIGNED(mqtt_loop_fail_count, mqtt_loop_failures);
+		mqtt_echo_failures++;
+		MEMFAULT_METRIC_SET_UNSIGNED(mqtt_echo_fail_count, mqtt_echo_failures);
 		return err;
 	}
 
@@ -274,7 +274,7 @@ static void mqtt_client_thread(void *arg1, void *arg2, void *arg3)
 			}
 
 			/* If we get here and network is still ready, broker disconnected us.
-			 * Wait briefly then loop back to reconnect.
+			 * Wait briefly then reconnect.
 			 */
 			if (mqtt_client_running && network_ready &&
 			    current_state == APP_MQTT_STATE_DISCONNECTED) {
