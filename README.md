@@ -49,14 +49,19 @@ git checkout 1.3x.0
 
 ## Quick Start
 
-1. **Set your Memfault project key** in `prj.conf`:
+1. **Set your Memfault project key** using an overlay file (recommended):
+   
+   Create `overlay-project-key.conf` with your project key:
    ```properties
    CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key_here"
    ```
+   
+   > **Tip**: Add `overlay-project-key.conf` to `.git/info/exclude` to keep your key out of version control.
 
 2. **Build and flash**:
    ```bash
-   west build -b nrf7002dk/nrf5340/cpuapp -p
+   west build -b nrf7002dk/nrf5340/cpuapp -p -- \
+     -DEXTRA_CONF_FILE="overlay-project-key.conf"
    west flash --erase
    ```
 
@@ -98,6 +103,7 @@ memfault-nrf7002dk/
 │   └── memfault_metrics_heartbeat_config.def  # Metric definitions
 ├── sysbuild/                         # Multi-image build configs
 ├── prj.conf                          # Main configuration
+├── overlay-project-key.conf         # Memfault project key (create this, git-ignored)
 ├── overlay-https-req.conf           # HTTPS client overlay (optional)
 ├── overlay-mqtt-echo.conf           # MQTT echo test overlay (optional)
 ├── pm_static_*.yml                  # Flash partition layout
@@ -108,12 +114,15 @@ memfault-nrf7002dk/
 
 ## Building Firmware
 
+> **Note**: All build commands below assume you have created `overlay-project-key.conf` with your Memfault project key (see [Quick Start](#quick-start)). Combine overlays using semicolons.
+
 ### Default Build (Recommended)
 
 **Includes**: BLE provisioning + WiFi metrics + nRF70 diagnostics CDR
 
 ```bash
-west build -b nrf7002dk/nrf5340/cpuapp -p
+west build -b nrf7002dk/nrf5340/cpuapp -p -- \
+  -DEXTRA_CONF_FILE="overlay-project-key.conf"
 west flash --erase
 ```
 
@@ -129,7 +138,7 @@ Adds periodic HTTPS connectivity testing:
 
 ```bash
 west build -b nrf7002dk/nrf5340/cpuapp -p -- \
-  -DEXTRA_CONF_FILE="overlay-https-req.conf"
+  -DEXTRA_CONF_FILE="overlay-project-key.conf;overlay-https-req.conf"
 west flash --erase
 ```
 
@@ -143,7 +152,7 @@ Adds MQTT broker connectivity testing with TLS:
 
 ```bash
 west build -b nrf7002dk/nrf5340/cpuapp -p -- \
-  -DEXTRA_CONF_FILE="overlay-mqtt-echo.conf"
+  -DEXTRA_CONF_FILE="overlay-project-key.conf;overlay-mqtt-echo.conf"
 west flash --erase
 ```
 
@@ -157,7 +166,7 @@ west flash --erase
 
 ```bash
 west build -b nrf7002dk/nrf5340/cpuapp -p -- \
-  -DEXTRA_CONF_FILE="overlay-https-req.conf;overlay-mqtt-echo.conf"
+  -DEXTRA_CONF_FILE="overlay-project-key.conf;overlay-https-req.conf;overlay-mqtt-echo.conf"
 west flash --erase
 ```
 
