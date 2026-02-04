@@ -9,28 +9,30 @@ cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(memfault-nrf7002dk)
 
-# Generate hex files from pem files for HTTPS client
-if(CONFIG_HTTPS_CLIENT_ENABLED)
+# Generate hex files from pem files for app HTTPS client
+if(CONFIG_APP_HTTPS_CLIENT_ENABLED)
     set(gen_dir ${CMAKE_CURRENT_BINARY_DIR}/certs)
     zephyr_include_directories(${gen_dir})
     generate_inc_file_for_target(
         app
-        cert/SSLcom-TLS-Root-2022-ECC.pem
+        src/modules/app_https_client/cert/SSLcom-TLS-Root-2022-ECC.pem
         ${gen_dir}/SSLcom-TLS-Root-2022-ECC.pem.inc
     )
 endif()
 
-# Set MQTT certificate folder for mqtt_helper auto-provisioning
-if(CONFIG_MQTT_CLIENT_ENABLED AND CONFIG_MQTT_HELPER_PROVISION_CERTIFICATES)
-    set(MQTT_HELPER_CERTIFICATES_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/cert")
-endif()
 
-# NORDIC SDK APP START
-add_subdirectory(src)
-# NORDIC SDK APP END
+zephyr_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+zephyr_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/modules/memfault/config)
 
-zephyr_include_directories(src)
-zephyr_include_directories(config)
+target_sources(app PRIVATE src/main.c)
+
+# Module subdirectories (SMF+zbus modular architecture)
+add_subdirectory(src/modules/button)
+add_subdirectory(src/modules/wifi)
+add_subdirectory(src/modules/ble_prov)
+add_subdirectory(src/modules/memfault)
+add_subdirectory(src/modules/app_https_client)
+add_subdirectory(src/modules/app_mqtt_client)
 
 # Add BLE provisioning library when enabled
 if(CONFIG_BLE_PROV_ENABLED)

@@ -6,8 +6,8 @@ A comprehensive Memfault integration sample for Nordic nRF7002DK, demonstrating 
 
 This sample application showcases:
 - **Platform**: nRF7002DK (nRF5340 + nRF7002 WiFi companion chip)
-- **SDK**: nRF Connect SDK v3.2.0
-- **Memfault SDK**: v1.32.0 (default in NCS v3.2.0)
+- **SDK**: nRF Connect SDK v3.2.1 (workspace application)
+- **Memfault SDK**: default in NCS v3.2.1
 
 ### Key Features
 
@@ -21,8 +21,8 @@ This sample application showcases:
 
 ### Optional Features (via overlays)
 
-- 📡 **HTTPS Client** - Periodic connectivity testing (`overlay-https-req.conf`)
-- 📨 **MQTT Echo Test** - MQTT broker connectivity testing with TLS (`overlay-mqtt-echo.conf`)
+- 📡 **App HTTPS Request Test** - Periodic connectivity testing (`overlay-app-https-req.conf`)
+- 📨 **App MQTT Echo Test** - MQTT broker connectivity testing with TLS (`overlay-app-mqtt-echo.conf`)
 
 ## Hardware Requirements
 
@@ -33,32 +33,35 @@ This sample application showcases:
 
 ## Prerequisites
 
-### 1. Memfault SDK v1.32.0
+### 1. NCS workspace (recommended)
 
-This project uses Memfault SDK v1.32.0 (default in NCS v3.2.0).
-
-> ✅ **No manual update needed** - NCS v3.2.0 includes Memfault SDK v1.32.0 by default.
-You may update it to a new version with following commands.
+This app is a **workspace application**: NCS is fetched automatically when you init the workspace.
 
 ```bash
-cd /opt/nordic/ncs/v3.2.0/modules/lib/memfault-firmware-sdk
-git pull
-git checkout 1.3x.0
+# From a directory that will become the workspace root (e.g. ncs-workspace)
+west init -l /path/to/memfault-nrf7002dk
+west update -o=--depth=1 -n
+cd memfault-nrf7002dk
+west build -p -b nrf7002dk/nrf5340/cpuapp
+```
+
+To use an existing NCS install (e.g. `/opt/nordic/ncs/v3.2.1`) instead:
+
+```bash
+cd /opt/nordic/ncs/v3.2.1
+west build -p -b nrf7002dk/nrf5340/cpuapp /path/to/memfault-nrf7002dk
 ```
 
 
 ## Quick Start
 
-1. **Set your Memfault project key** using an overlay file (recommended):
-   
-   Create `overlay-project-key.conf` with your project key:
+1. **Memfault project key**: `prj.conf` uses a placeholder so the project builds without an overlay. For production, create `overlay-project-key.conf` with your key:
    ```properties
    CONFIG_MEMFAULT_NCS_PROJECT_KEY="your_project_key_here"
    ```
-   
-   > **Tip**: Add `overlay-project-key.conf` to `.git/info/exclude` to keep your key out of version control.
+   Add `overlay-project-key.conf` to `.git/info/exclude` to keep your key out of version control.
 
-2. **Build and flash**:
+2. **Build and flash** (from NCS workspace root, or from app dir if you used `west init -l`):
    ```bash
    west build -b nrf7002dk/nrf5340/cpuapp -p -- \
      -DEXTRA_CONF_FILE="overlay-project-key.conf"
@@ -83,30 +86,39 @@ git checkout 1.3x.0
 
 ## Project Structure
 
+Modular layout (SMF + zbus); all feature code lives under `src/modules/`.
+
 ```
 memfault-nrf7002dk/
+├── west.yml                          # Workspace manifest (NCS v3.2.1)
+├── CMakeLists.txt                    # Root build (add_subdirectory modules)
+├── Kconfig                           # Root Kconfig (rsource module Kconfigs)
+├── prj.conf                          # Base + Memfault config
 ├── src/
-│   ├── main.c                       # Application entry point
-│   ├── https_client.c/h             # HTTPS client (optional)
-│   ├── mqtt_client.c/h              # MQTT echo test client (optional)
-│   ├── ble_provisioning.c/h         # BLE WiFi provisioning
-│   ├── mflt_ota_triggers.c/h        # OTA automation logic
-│   ├── mflt_wifi_metrics.c/h        # WiFi metrics collection
-│   ├── mflt_stack_metrics.c/h       # Stack usage tracking
-│   └── mflt_nrf70_fw_stats_cdr.c/h  # nRF70 FW stats CDR
+│   ├── main.c                        # Entry: banner + sleep (init via SYS_INIT)
+│   └── modules/
+│       ├── messages.h                # Zbus message types (button, wifi, memfault)
+│       ├── button/                   # Button SMF, BUTTON_CHAN
+│       ├── wifi/                     # WiFi STA SMF, WIFI_CHAN, conn_mgr
+│       ├── ble_prov/                 # BLE provisioning (subscribes WIFI_CHAN)
+│       ├── memfault/                 # Memfault group
+│       │   ├── core/                 # Upload, heartbeat, boot confirm, WIFI/BUTTON
+│       │   ├── metrics/              # WiFi + stack metrics
+│       │   ├── ota/                  # OTA triggers (button 2, WiFi connect)
+│       │   └── cdr/                  # nRF70 FW stats CDR
+│       ├── app_https_client/          # App HTTPS request test (optional, WIFI_CHAN)
+│       │   └── cert/                 # HTTPS root CA certificate
+│       └── app_mqtt_client/          # App MQTT echo test (optional, WIFI_CHAN)
+│           └── cert/                 # MQTT broker CA certificate
 ├── boards/
 │   └── nrf7002dk_nrf5340_cpuapp.conf # Board-specific config
-├── cert/
-│   ├── SSLcom-TLS-Root-2022-ECC.pem # Root CA for HTTPS
-│   └── mqtt-ca.pem                  # Root CA for MQTT broker
-├── config/
-│   └── memfault_metrics_heartbeat_config.def  # Metric definitions
-├── sysbuild/                         # Multi-image build configs
-├── prj.conf                          # Main configuration
-├── overlay-project-key.conf         # Memfault project key (create this, git-ignored)
-├── overlay-https-req.conf           # HTTPS client overlay (optional)
-├── overlay-mqtt-echo.conf           # MQTT echo test overlay (optional)
-├── pm_static_*.yml                  # Flash partition layout
+├── sysbuild/                         # Multi-image (MCUboot, hci_ipc, app)
+├── overlay-project-key.conf         # Memfault key (create from template, git-ignored)
+├── overlay-app-https-req.conf       # App HTTPS request test (optional)
+├── overlay-app-mqtt-echo.conf       # App MQTT echo test (optional)
+├── pm_static_*.yml                   # Flash partition layout
+├── PRD.md                            # Product requirements
+├── LICENSE                           # Nordic 5-Clause
 └── README.md
 ```
 
@@ -114,7 +126,7 @@ memfault-nrf7002dk/
 
 ## Building Firmware
 
-> **Note**: All build commands below assume you have created `overlay-project-key.conf` with your Memfault project key (see [Quick Start](#quick-start)). Combine overlays using semicolons.
+> **Note**: Default build uses a placeholder key; for production use `-DEXTRA_CONF_FILE="overlay-project-key.conf"`. Combine overlays with semicolons (e.g. `overlay-project-key.conf;overlay-app-https-req.conf`).
 
 ### Default Build (Recommended)
 
@@ -132,27 +144,28 @@ west flash --erase
 - ✅ nRF70 firmware statistics CDR (Button 1)
 - ✅ WiFi vendor detection (AP OUI lookup)
 
-### With HTTPS Client (Optional)
+### With App HTTPS Request Test (Optional)
 
 Adds periodic HTTPS connectivity testing:
 
 ```bash
 west build -b nrf7002dk/nrf5340/cpuapp -p -- \
-  -DEXTRA_CONF_FILE="overlay-project-key.conf;overlay-https-req.conf"
+  -DEXTRA_CONF_FILE="overlay-project-key.conf;overlay-app-https-req.conf"
 west flash --erase
 ```
 
 **Additional features**:
 - ✅ Periodic HTTPS HEAD requests to `example.com` (every 60s)
 - ✅ Network connectivity monitoring
+- ✅ Metrics: `app_https_req_total_count`, `app_https_req_fail_count`
 
-### With MQTT Echo Test (Optional)
+### With App MQTT Echo Test (Optional)
 
 Adds MQTT broker connectivity testing with TLS:
 
 ```bash
 west build -b nrf7002dk/nrf5340/cpuapp -p -- \
-  -DEXTRA_CONF_FILE="overlay-project-key.conf;overlay-mqtt-echo.conf"
+  -DEXTRA_CONF_FILE="overlay-project-key.conf;overlay-app-mqtt-echo.conf"
 west flash --erase
 ```
 
@@ -160,13 +173,13 @@ west flash --erase
 - ✅ TLS-secured MQTT connection to `test.mosquitto.org:8883`
 - ✅ Publishes messages and subscribes to same topic (echo test)
 - ✅ Automatic reconnection on broker disconnect
-- ✅ Metrics: `mqtt_echo_total_count`, `mqtt_echo_fail_count`
+- ✅ Metrics: `app_mqtt_echo_total_count`, `app_mqtt_echo_fail_count`
 
-### With Both HTTPS and MQTT (Optional)
+### With Both App HTTPS and MQTT (Optional)
 
 ```bash
 west build -b nrf7002dk/nrf5340/cpuapp -p -- \
-  -DEXTRA_CONF_FILE="overlay-project-key.conf;overlay-https-req.conf;overlay-mqtt-echo.conf"
+  -DEXTRA_CONF_FILE="overlay-project-key.conf;overlay-app-https-req.conf;overlay-app-mqtt-echo.conf"
 west flash --erase
 ```
 
@@ -390,7 +403,7 @@ python3 script/nrf70_fw_stats_parser.py \
 
 ### Custom Metrics
 
-Add to `config/memfault_metrics_heartbeat_config.def`:
+Add to `src/modules/memfault/config/memfault_metrics_heartbeat_config.def`:
 
 ```c
 MEMFAULT_METRICS_KEY_DEFINE(custom_counter, kMemfaultMetricType_Unsigned)

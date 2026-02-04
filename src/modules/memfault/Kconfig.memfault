@@ -1,0 +1,29 @@
+#
+# Copyright (c) 2026 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+config MEMFAULT_MODULE
+	bool "Memfault module group"
+	default y
+	help
+	  Memfault core, metrics, OTA triggers, and optional nRF70 CDR.
+
+if MEMFAULT_MODULE
+
+module = MEMFAULT_MODULE
+module-str = memfault_module
+source "subsys/logging/Kconfig.template.log_config"
+
+config NRF70_FW_STATS_CDR_ENABLED
+	bool "Enable nRF70 firmware statistics CDR upload to Memfault"
+	depends on MEMFAULT_CDR_ENABLE
+	depends on WIFI_NRF70
+	default n
+	help
+	  Collect and upload nRF70 WiFi firmware statistics (PHY, LMAC, UMAC)
+	  as Custom Data Recording. Trigger: Button 1 short press.
+	  CDR uploads are limited to 1 per device per 24 hours.
+
+endif # MEMFAULT_MODULE
